@@ -78,7 +78,7 @@ const GiftCategory = () => {
           </div>
         </div>
       </div>
-      <div className="w-[94%] mx-auto mt-20">
+      <div className="w-[94%] mx-auto mt-14">
         <button
           onClick={() => navigate("/review-transaction")}
           className="bg-gray-900 cursor-pointer w-full rounded-2xl py-1.5 capitalize text-sm font-semibold"
