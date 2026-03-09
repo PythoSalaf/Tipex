@@ -1,99 +1,100 @@
-import { Link } from "react-router-dom";
-import { BsThreeDotsVertical } from "react-icons/bs";
-import Slider from "react-slick";
-
-// Make sure you imported this in App.jsx or main.jsx
-// import "slick-carousel/slick/slick.css";
-// import "slick-carousel/slick/slick-theme.css";
+import { GoZap } from "react-icons/go";
+import { LuBrain } from "react-icons/lu";
+import { FaRobot } from "react-icons/fa6";
+import { BsShield } from "react-icons/bs";
+import { PiSwapBold } from "react-icons/pi";
+import { GiStaryu } from "react-icons/gi";
+import { EmblaRow, WorkCard } from "../components";
 
 const Home = () => {
-  const giftOption = [
-    { id: 1, category: "christmas", icon: "red" },
-    { id: 2, category: "birthday", icon: "yellow" },
-    { id: 3, category: "thank you", icon: "green" },
-    { id: 4, category: "graduation", icon: "white" },
-    { id: 5, category: "engagement", icon: "pink" },
-    { id: 6, category: "anniversary", icon: "purple" },
+  const workData = [
+    {
+      id: 1,
+      title: "Autonomous Agents",
+      icon: <FaRobot className="h-4 w-4 md:h-6 md:w-6 text-[#1ee3bf]" />,
+      description:
+        "Set rules once. Your AI agent monitors conditions, reasons about execution, and transfers tokens automatically.",
+    },
+    {
+      id: 2,
+      title: "AI Reasoning Engine",
+      icon: <LuBrain className="h-4 w-4 md:h-6 md:w-6 text-[#1ee3bf]" />,
+      description:
+        "Before every payment, AI evaluates your balance, upcoming obligations, and economic sustainability to make smart decisions.",
+    },
+    {
+      id: 3,
+      title: "Multi-Chain Optimization",
+      icon: <GoZap className="h-4 w-4 md:h-6 md:w-6 text-[#1ee3bf]" />,
+      description:
+        "Agents pick the cheapest chain for each transaction across Ethereum, Polygon, Arbitrum, Base & more.",
+    },
+    {
+      id: 4,
+      title: "Self-Custodial Wallets",
+      icon: <BsShield className="h-4 w-4 md:h-6 md:w-6 text-[#1ee3bf]" />,
+      description:
+        "Each rule gets a dedicated agent wallet. You stay in control fund it, pause it, or shut it down anytime.",
+    },
+    {
+      id: 5,
+      title: "All Payment Types",
+      icon: <PiSwapBold className="h-4 w-4 md:h-6 md:w-6 text-[#1ee3bf]" />,
+      description:
+        "Gifts, salaries, subscriptions, conditional transfers  automate any recurring or one-time payment with USD₮ and XAU₮.",
+    },
+    {
+      id: 6,
+      title: "Natural Language Rules",
+      icon: <GiStaryu className="h-4 w-4 md:h-6 md:w-6 text-[#1ee3bf]" />,
+      description:
+        "Pay 1200 USD₮ salary to John every month if balance > $2000 just type it and the agent understands.",
+    },
   ];
-
-  const slides = [
-    {
-      text: "Send money as a surprise gift to your friends",
-      bg: "bg-purple-600",
-    },
-    {
-      text: "Choose from multiple gift categories",
-      bg: "bg-rose-500",
-    },
-    {
-      text: "Customize your message and amount",
-      bg: "bg-green-600",
-    },
-    {
-      text: "Get notified when your friend receives the gift",
-      bg: "bg-yellow-600 text-black",
-    },
-  ];
-
-  const settings = {
-    dots: true,
-    infinite: true,
-    speed: 500,
-    arrows: false,
-    autoplay: true,
-    autoplaySpeed: 3000,
-    slidesToShow: 1,
-    slidesToScroll: 1,
-  };
-
   return (
-    <div className="w-full py-2">
-      <div className="w-[94%] flex items-center justify-between mx-auto">
-        <Link to="/" className="text-blue-600 text-lg">
-          Tipex
-        </Link>
-        <h3 className="text-white">Send a gift</h3>
-        <BsThreeDotsVertical className="text-white size-5" />
-      </div>
-
-      {/* Carousel section */}
-      <div className="w-[90%] mx-auto my-9 rounded-2xl overflow-hidden">
-        <Slider {...settings}>
-          {slides.map((slide, idx) => (
-            <div key={idx}>
-              <div
-                className={`h-32 flex items-center justify-center text-center px-4 rounded-2xl ${slide.bg}`}
-              >
-                <p className="text-base sm:text-lg font-semibold">
-                  {slide.text}
-                </p>
-              </div>
+    <div className="w-full  text-white">
+      <header className="w-full h-[75vh] md:h-screen bg-gradient-hero pt-24">
+        <div className="w-[95%] mx-auto flex  items-center justify-center flex-col">
+          <div className="flex items-center gap-2 rounded-full border border-[#23a272]/30  px-4 py-1.5 text-sm md:text-base text-[#23a272] bg-[#23a272]/10 mb-4 animate-pulse">
+            <GoZap className="h-3 md:h-4 w-3 md:w-4" />
+            <h3 className="">Autonomous Payment Agents</h3>
+          </div>
+          <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-center tracking-tight leading-14 md:leading-20 lg:leading-24 mb-4.5">
+            <span className="text-gradient">Autonomous </span> <br /> Stablecoin
+            Payments
+          </h1>
+          <p className="text-[#687e8e] text-base md:text-lg lg:text-xl text-center max-w-3xl leading-9">
+            Create autonomous agents that execute gifts, salaries, subscriptions
+            & conditional transfers on-chain using USD₮ and XAU₮ all hands-free.
+          </p>
+          <div className="mt-10 flex items-center gap-x-8">
+            <div className="">
+              <button className="bg-[#1ee3bf] text-black px-4 text-base  font-semibold cursor-pointer rounded-2xl py-1.5">
+                Connect Wallet
+              </button>
             </div>
-          ))}
-        </Slider>
+            <button className="border border-[#23a272] px-5 py-1.5 rounded-2xl font-semibold cursor-pointer  ">
+              Get started
+            </button>
+          </div>
+        </div>
+      </header>
+      <div className="w-[95%] mx-auto my-20">
+        <EmblaRow reverse={false} />
+        {/* <div className="mt-5">
+          <EmblaRow reverse={true} />
+        </div> */}
       </div>
-
-      {/* Gift Options */}
-      <div className="w-[94%] mx-auto text-white">
-        <h2 className="font-semibold text-base">Gift Options</h2>
-        <div className="w-full mt-5 grid grid-cols-2 gap-x-3 gap-y-5">
-          {giftOption.map((item) => (
-            <Link
-              to={`/${item.category}`}
-              className="w-[95%] mx-auto"
-              key={item.id}
-            >
-              <div
-                className="rounded-2xl h-28 w-full mx-auto"
-                style={{ backgroundColor: item.icon }}
-              ></div>
-              <h4 className="pl-1 capitalize font-semibold pt-0.5 text-sm">
-                {item.category}
-              </h4>
-            </Link>
+      <section className="mt-10 mb-7 w-[95%] mx-auto">
+        <h3 className="text-center font-bold text-2xl md:text-3xl lg:text-4xl">
+          How it work
+        </h3>
+        <div className="mt-7 grid grid-cols-1 md:gridcls-2 lg:grid-cols-3 gap-6 ">
+          {workData.map((item) => (
+            <WorkCard key={item.id} {...item} />
           ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 };
