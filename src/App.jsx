@@ -1,10 +1,10 @@
 import { Routes, Route } from "react-router-dom";
 import {
-  GiftCategory,
+  CreatePaymentAgent,
+  Dashboard,
   GiftSuccessful,
   Home,
   Layout,
-  TransactionReview,
 } from "./pages";
 
 function App() {
@@ -13,8 +13,8 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
-          <Route path="/:category" element={<GiftCategory />} />
-          <Route path="/review-transaction" element={<TransactionReview />} />
+          <Route path="create-agent" element={<CreatePaymentAgent />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="/successful" element={<GiftSuccessful />} />
         </Route>
       </Routes>

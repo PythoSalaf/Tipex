@@ -14,9 +14,9 @@ const Navbar = () => {
           <h1 className="text-2xl font-bold text-gradient">Tipex</h1>
         </div>
         <div className="hidden md:flex items-center gap-4">
-          <NavLink>Home</NavLink>
-          <NavLink>Create Agent</NavLink>
-          <NavLink>Dashboard</NavLink>
+          <NavLink to="/">Home</NavLink>
+          <NavLink to="/create-agent">Create Agent</NavLink>
+          <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink>Logs</NavLink>
         </div>
         <div className="">

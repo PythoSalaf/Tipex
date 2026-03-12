@@ -82,19 +82,36 @@ const Home = () => {
       <div className="w-[95%] mx-auto my-20">
         <EmblaRow reverse={false} />
         {/* <div className="mt-5">
-          <EmblaRow reverse={true} />
+          ,<EmblaRow reverse={true} />
         </div> */}
       </div>
       <section className="mt-10 mb-7 w-[95%] mx-auto">
         <h3 className="text-center font-bold text-2xl md:text-3xl lg:text-4xl">
           How it work
         </h3>
-        <div className="mt-7 grid grid-cols-1 md:gridcls-2 lg:grid-cols-3 gap-6 ">
+        <div className="mt-7 grid grid-cols-1 md:gridcls-2 lg:grid-cols-3 gap-4 md:gap-6 ">
           {workData.map((item) => (
             <WorkCard key={item.id} {...item} />
           ))}
         </div>
       </section>
+      <div className="mt-8 md:mt-14 mb-6 w-[85%] md:w-[70%] lg:w-[60%] mx-auto py-5 bg-[#12151a] rounded-2xl border border-[#141a1e]">
+        <div className="flex flex-col items-center justify-center">
+          <FaRobot className="h-7 w-7 md:h-9 md:w-9 text-[#1ee3bf] animate-bounce" />
+          <h3 className="text-xl md:text-2xl lg:text-3xl font-semibold my-5 text-center">
+            Ready to automate your payments?
+          </h3>
+          <p className="text-[#687e8e] text-sm md:text-base lg:text-lg text-center  max-w-xl">
+            Connect your wallet and create your first autonomous payment agent
+            in under a minute.
+          </p>
+          <div className="mt-7 mb-2">
+            <button className="bg-[#1ee3bf] text-black px-4 text-base  font-semibold cursor-pointer rounded-2xl py-1.5">
+              Connect Wallet
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
