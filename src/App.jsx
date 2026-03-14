@@ -5,6 +5,7 @@ import {
   GiftSuccessful,
   Home,
   Layout,
+  LogPage,
 } from "./pages";
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           <Route path="create-agent" element={<CreatePaymentAgent />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="/successful" element={<GiftSuccessful />} />
+          <Route path="/logs" element={<LogPage />} />
         </Route>
       </Routes>
     </>

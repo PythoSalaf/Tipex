@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { FaRobot } from "react-icons/fa6";
 import { PiWalletFill } from "react-icons/pi";
 import { MdMenu, MdClose } from "react-icons/md";
@@ -11,13 +11,15 @@ const Navbar = () => {
       <div className="bg-black text-white flex items-center justify-between w-[95%] mx-auto">
         <div className="flex items-center gap-2">
           <FaRobot className="w-7 h-7 animate-bounce text-[#1ee3bf]" />
-          <h1 className="text-2xl font-bold text-gradient">Tipex</h1>
+          <Link to="/" className="text-2xl font-bold text-gradient">
+            Tipex
+          </Link>
         </div>
         <div className="hidden md:flex items-center gap-4">
           <NavLink to="/">Home</NavLink>
           <NavLink to="/create-agent">Create Agent</NavLink>
           <NavLink to="/dashboard">Dashboard</NavLink>
-          <NavLink>Logs</NavLink>
+          <NavLink to="/logs">Logs</NavLink>
         </div>
         <div className="">
           <button className="bg-[#1ee3bf] text-black px-2 py-1 rounded-xl hidden md:flex items-center gap-1.5 cursor-pointer">
