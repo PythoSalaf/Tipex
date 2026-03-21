@@ -37,7 +37,7 @@ const COMMANDS = [
 ];
 
 // ── Inner chat UI ─────────────────────────────────────────────────────────────
-function AgentChat() {
+function AgentChat({ onNewChat }) {
   const navigate = useNavigate();
   const { timeline, streamingText, busy, slots, sendMessage, renderSlot, renderToolResult } = useGlove();
   const [input, setInput] = useState("");
@@ -123,7 +123,7 @@ function AgentChat() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.location.reload()}
+            onClick={onNewChat}
             title="New conversation"
             className="flex items-center gap-1.5 text-[#687e8e] hover:text-white text-xs px-2.5 py-1.5 rounded-lg hover:bg-[#111820] transition-all"
           >
@@ -348,10 +348,15 @@ function AgentChat() {
 }
 
 // ── Page wrapper ──────────────────────────────────────────────────────────────
-const CreatePaymentAgent = () => (
-  <GloveProvider client={gloveClient}>
-    <AgentChat />
-  </GloveProvider>
-);
+const CreatePaymentAgent = () => {
+  // A new key forces GloveProvider to remount with a fresh MemoryStore.
+  // Initialized from Date.now() so every page mount starts a clean session.
+  const [chatKey, setChatKey] = useState(() => Date.now());
+  return (
+    <GloveProvider key={chatKey} client={gloveClient}>
+      <AgentChat onNewChat={() => setChatKey(Date.now())} />
+    </GloveProvider>
+  );
+};
 
 export default CreatePaymentAgent;
