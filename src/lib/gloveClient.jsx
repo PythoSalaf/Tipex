@@ -10,11 +10,11 @@ import { EXPLORER_TX } from "./constants";
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
-async function groqChat(messages, tools) {
+async function groqChat(messages, tools, retries = 3) {
   const body = {
     model: GROQ_MODEL,
     messages,
-    max_tokens: 1024,
+    max_tokens: 800,
     stream: false,
   };
   if (tools?.length) {
@@ -29,6 +29,16 @@ async function groqChat(messages, tools) {
     },
     body: JSON.stringify(body),
   });
+
+  // Auto-retry on 429 rate limit using the suggested wait time
+  if (res.status === 429 && retries > 0) {
+    const errText = await res.text();
+    const waitMatch = errText.match(/try again in ([\d.]+)s/i);
+    const waitMs = waitMatch ? Math.ceil(parseFloat(waitMatch[1]) * 1000) + 200 : 5000;
+    await new Promise((r) => setTimeout(r, waitMs));
+    return groqChat(messages, tools, retries - 1);
+  }
+
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Groq ${res.status}: ${err}`);
