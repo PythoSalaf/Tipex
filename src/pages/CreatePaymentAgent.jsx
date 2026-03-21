@@ -67,6 +67,42 @@ function AgentChat() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+
+        {/* Capabilities card — always shown at top */}
+        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center shrink-0">
+              <FaRobot className="h-3.5 w-3.5 text-[#1ee3bf]" />
+            </div>
+            <div>
+              <p className="text-white text-sm font-semibold">Tipex AI</p>
+              <p className="text-[#687e8e] text-xs">Your autonomous payment agent assistant</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { icon: "🤖", label: "Create agent", desc: "Set up a new autonomous payment" },
+              { icon: "📋", label: "List agents", desc: "View all your payment agents" },
+              { icon: "💰", label: "Check balance", desc: "USDC + ETH in any agent wallet" },
+              { icon: "📊", label: "Agent status", desc: "Full health report for agents" },
+              { icon: "⏸", label: "Pause / Resume", desc: "Control agent execution" },
+              { icon: "✏️", label: "Edit agent", desc: "Update amount, schedule, limits" },
+              { icon: "🗑", label: "Delete agent", desc: "Remove an agent permanently" },
+              { icon: "📜", label: "Payment logs", desc: "View transaction history" },
+              { icon: "🕐", label: "Next payment", desc: "See upcoming payment schedule" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-start gap-2 px-3 py-2 bg-[#0a0f15] border border-[#1e2a35] rounded-xl">
+                <span className="text-sm shrink-0 mt-0.5">{item.icon}</span>
+                <div>
+                  <p className="text-white text-xs font-semibold">{item.label}</p>
+                  <p className="text-[#687e8e] text-xs leading-tight">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[#3a4a5a] text-xs text-center">Just type naturally — e.g. "create a salary agent" or "check ken's balance"</p>
+        </div>
+
         {(() => {
           // When busy, pull the last user message out so slots render before it
           const lastEntry = timeline[timeline.length - 1];
