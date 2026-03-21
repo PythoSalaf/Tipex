@@ -22,3 +22,69 @@ body {
     ),
     hsl(220 20% 6%);
 }
+
+/* Glassmorphism utilities */
+.glass {
+  @apply backdrop-blur-xl bg-white/5 border border-white/10;
+}
+
+.glass-light {
+  @apply backdrop-blur-md bg-white/10 border border-white/20;
+}
+
+.glass-dark {
+  @apply backdrop-blur-xl bg-[#12151a]/80 border border-[#1e2a35]/50;
+}
+
+/* Enhanced card hover effects */
+.card-glow {
+  @apply transition-all duration-300;
+}
+
+.card-glow:hover {
+  box-shadow: 0 20px 40px rgba(30, 227, 191, 0.15);
+  border-color: rgba(30, 227, 191, 0.3);
+}
+
+/* Gradient border effect */
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(30, 227, 191, 0.5), rgba(30, 227, 191, 0.1));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Smooth scroll behavior */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #12151a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e2a35;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2a3a4a;
+}

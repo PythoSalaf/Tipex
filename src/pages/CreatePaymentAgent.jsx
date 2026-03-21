@@ -1,308 +1,366 @@
-import { LuSparkles } from "react-icons/lu";
-import { FaRobot } from "react-icons/fa6";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { GloveProvider, useGlove } from "glove-react";
+import { FaRobot } from "react-icons/fa6";
+import { IoSend, IoRefresh, IoChevronDown, IoChevronUp } from "react-icons/io5";
+import { gloveClient, onModelSwitch } from "../lib/gloveClient";
 
-const CreatePaymentAgent = () => {
-  const [prompt, setPrompt] = useState("");
+// ── Tool name → friendly label ────────────────────────────────────────────────
+const TOOL_LABELS = {
+  select_agent:           "Loading your agents…",
+  choose_payment_type:    "Preparing payment options…",
+  collect_recipient_info: "Preparing recipient form…",
+  collect_payment_details:"Preparing payment details…",
+  review_and_confirm:     "Preparing review summary…",
+  create_agent_wallet:    "Creating agent wallet…",
+  list_agents:            "Loading your agents…",
+  check_balance:          "Fetching wallet balance…",
+  agent_status:           "Checking agent health…",
+  pause_agent:            "Pausing agent…",
+  resume_agent:           "Resuming agent…",
+  delete_agent:           "Preparing deletion…",
+  edit_agent:             "Loading agent settings…",
+  fund_agent:             "Preparing funding form…",
+  check_logs:             "Loading payment logs…",
+  next_payment:           "Calculating schedules…",
+};
+
+const COMMANDS = [
+  { icon: "🤖", label: "Create agent",  desc: "New autonomous payment",   msg: "I want to create a new payment agent" },
+  { icon: "📋", label: "List agents",   desc: "View all your agents",     msg: "show me my agents" },
+  { icon: "💰", label: "Check balance", desc: "USDC + ETH in wallet",     msg: "check balance" },
+  { icon: "📜", label: "Payment logs",  desc: "Transaction history",      msg: "show payment logs" },
+];
+
+// ── Inner chat UI ─────────────────────────────────────────────────────────────
+function AgentChat({ onNewChat }) {
   const navigate = useNavigate();
+  const { timeline, streamingText, busy, slots, sendMessage, renderSlot, renderToolResult } = useGlove();
+  const [input, setInput] = useState("");
+  const [cardOpen, setCardOpen] = useState(true);
+  const [modelNotice, setModelNotice] = useState(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const hasGreeted = useRef(false);
 
-  const [form, setForm] = useState({
-    ruleType: "",
-    name: "",
-    address: "",
-    token: "",
-    amount: "",
-    balance: "",
-    schedule: "",
-    date: "",
-    chain: "",
-  });
-
-  const ruleType = [
-    { value: "gift", label: "🎁 Gift" },
-    { value: "salary", label: "💼 Salary" },
-    { value: "subscription", label: "🔄 Subscription" },
-    { value: "conditional", label: "⚡ Conditional" },
-  ];
-
-  // ✅ PARSER
-
-  const parseRule = () => {
-    const text = prompt.toLowerCase();
-
-    let type = "";
-
-    if (text.includes("salary")) type = "salary";
-    else if (text.includes("gift")) type = "gift";
-    else if (text.includes("subscription")) type = "subscription";
-    else if (text.includes("if")) type = "conditional";
-
-    const amountMatch = text.match(/pay\s+(\d+)/);
-    const tokenMatch = text.match(/(usdt|usd|eth|btc)/);
-    const nameMatch = text.match(/to\s+([a-z]+)/);
-    const scheduleMatch = text.match(/(daily|weekly|monthly|yearly)/);
-    const balanceMatch = text.match(/balance\s*>\s*(\d+)/);
-
-    let chain = "";
-
-    if (text.includes("ethereum")) chain = "Ethereum";
-    else if (text.includes("polygon")) chain = "Polygon";
-    else if (text.includes("arbitrum")) chain = "Arbitrum";
-    else if (text.includes("base")) chain = "Base";
-    else if (text.includes("optimism")) chain = "Optimism";
-
-    setForm({
-      ...form,
-      ruleType: type,
-      name: nameMatch ? nameMatch[1] : "",
-      token: tokenMatch ? tokenMatch[1].toUpperCase() : "",
-      amount: amountMatch ? amountMatch[1] : "",
-      schedule: scheduleMatch ? scheduleMatch[1] : "",
-      balance: balanceMatch ? balanceMatch[1] : "",
-      chain,
+  // Subscribe to model waterfall switches
+  useEffect(() => {
+    onModelSwitch((model) => {
+      const label = model.includes("8b") ? "llama-3.1-8b-instant (fast)" : model;
+      setModelNotice(`Rate limit hit — switched to ${label}`);
+      setTimeout(() => setModelNotice(null), 8000);
     });
+  }, []);
+
+  // Bridge: tool renders dispatch this event to send a message without access to sendMessage
+  useEffect(() => {
+    const handler = (e) => {
+      if (!busy) sendMessage(e.detail.text);
+    };
+    window.addEventListener("tipex:sendmsg", handler);
+    return () => window.removeEventListener("tipex:sendmsg", handler);
+  }, [busy, sendMessage]);
+
+  // Auto-scroll on new content
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [timeline, streamingText, slots]);
+
+  // Trigger greeting once on mount
+  useEffect(() => {
+    if (!hasGreeted.current) {
+      hasGreeted.current = true;
+      sendMessage("hello");
+    }
+  }, [sendMessage]);
+
+  // Auto-collapse capabilities card once AI has responded
+  const conversationStarted = timeline.some((e) => e.kind === "agent_text");
+  useEffect(() => {
+    if (conversationStarted) setCardOpen(false);
+  }, [conversationStarted]);
+
+  const submit = () => {
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput("");
+    sendMessage(text);
+    inputRef.current?.focus();
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+  };
+
+  // Find the currently-running tool name from timeline
+  const runningTool = timeline.find((e) => e.kind === "tool" && e.status === "running");
+  const runningLabel = runningTool ? (TOOL_LABELS[runningTool.toolName] || "Working…") : null;
+
+  // Determine header status text
+  const headerStatus = busy
+    ? (runningLabel || "Thinking…")
+    : "Payment Agent Assistant · Base Sepolia";
+
   return (
-    <div className="w-full pt-16 text-white">
-      <div className="flex flex-col items-center justify-center ">
-        <h3 className="text-xl md:text-2xl lg:text-3xl font-semibold mt-4">
-          Create Payment Agent
-        </h3>
+    <div className="w-full h-screen pt-14 text-white flex flex-col overflow-hidden bg-[#060a0f]">
 
-        <p className="mt-3 text-[#687e8e] text-sm md:text-base lg:text-lg text-center">
-          Define payment conditions and let your AI agent handle the rest.
-        </p>
+      {/* Model-switch notice */}
+      {modelNotice && (
+        <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-400 text-xs">
+          <span>⚡</span>
+          <span>{modelNotice}</span>
+          <button onClick={() => setModelNotice(null)} className="ml-auto text-yellow-400/60 hover:text-yellow-400">✕</button>
+        </div>
+      )}
 
-        <div className="w-[95%] mx-auto md:w-[80%] lg:w-[60%]">
-          {/* AI Rule Builder */}
-
-          <div className="bg-[#12151a] rounded-xl border border-[#141a1e] py-4 mt-10 shadow-2xl">
-            <div className="w-[92%] mx-auto">
-              <div className="flex items-center gap-2.5">
-                <LuSparkles className="h-5 md:h-7 w-5 md:w-7 text-purple-500" />
-                <h4 className="text-sm md:text-base font-semibold lg:text-lg">
-                  AI Rule Builder
-                </h4>
-              </div>
-
-              <div className="flex items-center gap-3 mt-4 mb-3">
-                <input
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  type="text"
-                  className="bg-[#0e1116] outline-0 w-[86%] rounded-xl h-10 border border-[#687e8e]/30 px-3 text-sm md:text-base lg:text-lg placeholder:text-sm placeholder:text-[#687e8e] font-semibold"
-                  placeholder='"Pay 1200 USD₮ salary to John every month if balance > $2000"'
-                />
-
-                <button
-                  onClick={parseRule}
-                  className="ml-auto bg-purple-600 py-1 text-white px-5 rounded-lg text-base font-semibold cursor-pointer"
-                >
-                  Parse
-                </button>
-              </div>
-            </div>
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-[#1e2a35] bg-[#0a0f15] flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${busy ? "bg-[#1ee3bf]/20" : "bg-[#1ee3bf]/10"}`}>
+            <FaRobot className={`h-4 w-4 text-[#1ee3bf] ${busy ? "animate-spin" : ""}`} />
           </div>
-
-          {/* Automation Type */}
-
-          <div className="mt-7">
-            <h3 className="text-lg md:text-xl lg:text-2xl font-semibold">
-              Automation Type
-            </h3>
-
-            <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-4 ">
-              {ruleType.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      ruleType: item.value,
-                    })
-                  }
-                  className={`text-xs md:text-sm rounded-full flex items-center border font-semibold px-4 py-1 transition-all
-                    ${
-                      form.ruleType === item.value
-                        ? "border-primary bg-[#1ee3bf] text-black  "
-                        : "border-[#687e8e]/30 text-primary"
-                    }
-                  `}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            {/* FORM */}
-
-            <div className="w-full mt-8 mb-4">
-              <div className="flex flex-col md:flex-row items-center gap-8 justify-between">
-                <div className="w-full">
-                  <label>Recipient Name</label>
-                  <input
-                    value={form.name}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        name: e.target.value,
-                      })
-                    }
-                    type="text"
-                    className="w-full rounded-xl px-2 h-9 border mt-3 border-[#687e8e]/30 "
-                  />
-                </div>
-
-                <div className="w-full">
-                  <label>Recipient Address</label>
-                  <input
-                    value={form.address}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        address: e.target.value,
-                      })
-                    }
-                    type="text"
-                    className="w-full rounded-xl px-2 h-9 border mt-3 border-[#687e8e]/30 "
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col md:flex-row items-center mt-4 md:mt-8 gap-8 justify-between">
-                <div className="w-full">
-                  <label>Token</label>
-                  <input
-                    value={form.token}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        token: e.target.value,
-                      })
-                    }
-                    type="text"
-                    className="w-full rounded-xl px-2 h-9 border mt-3 border-[#687e8e]/30 "
-                  />
-                </div>
-
-                <div className="w-full">
-                  <label>Amount</label>
-                  <input
-                    value={form.amount}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        amount: e.target.value,
-                      })
-                    }
-                    type="number"
-                    className="w-full rounded-xl px-2 h-9 border mt-3 border-[#687e8e]/30 "
-                  />
-                </div>
-
-                <div className="w-full">
-                  <label>Balance($)</label>
-                  <input
-                    value={form.balance}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        balance: e.target.value,
-                      })
-                    }
-                    type="number"
-                    className="w-full rounded-xl px-2 h-9 border mt-3 border-[#687e8e]/30 "
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col md:flex-row items-center mt-4 md:mt-8 gap-8 justify-between">
-                <div className="w-full">
-                  <label>Schedule</label>
-                  <input
-                    value={form.schedule}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        schedule: e.target.value,
-                      })
-                    }
-                    type="text"
-                    className="w-full rounded-xl px-2 h-9 border mt-3 border-[#687e8e]/30 "
-                  />
-                </div>
-
-                <div className="w-full">
-                  <label>Start Date</label>
-                  <input
-                    value={form.date}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        date: e.target.value,
-                      })
-                    }
-                    type="date"
-                    className="w-full rounded-xl px-2 h-9 border mt-3 border-[#687e8e]/30 "
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Preferred Chains */}
-
-          <div className="my-5">
-            <h3 className="text-lg md:text-xl lg:text-2xl font-semibold">
-              Preferred Chains
-            </h3>
-
-            <div className="mt-5 grid grid-cols-3 md:grid-cols-5 gap-4 ">
-              {["Ethereum", "Polygon", "Arbitrum", "Base", "Optimism"].map(
-                (item, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        chain: item,
-                      })
-                    }
-                    className={`text-xs md:text-sm rounded-full flex items-center font-semibold justify-center border px-4 py-1 transition-all
-                      ${
-                        form.chain === item
-                          ? "border-primary bg-[#1ee3bf] text-black"
-                          : "border-[#687e8e]/30 text-primary"
-                      }
-                    `}
-                  >
-                    {item}
-                  </button>
-                ),
-              )}
-            </div>
-          </div>
-
-          <div className="mt-10 mb-6 flex gap-10">
-            <button className="bg-[#1ee3bf] text-black px-3 py-2 rounded-xl text-base font-semibold flex items-center gap-1.5 cursor-pointer">
-              <FaRobot className="h-5 w-5" />
-              Create Agent
-            </button>
-
-            <button
-              className="border border-purple-600 px-4 py-0.5 cursor-pointer rounded-2xl font-semibold text-sm md:text-base "
-              onClick={() => navigate(-1)}
-            >
-              Cancel
-            </button>
+          <div>
+            <p className="text-sm font-semibold">Tipex AI</p>
+            <p className={`text-xs transition-colors ${busy ? "text-[#1ee3bf]" : "text-[#687e8e]"}`}>
+              {headerStatus}
+            </p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onNewChat}
+            title="New conversation"
+            className="flex items-center gap-1.5 text-[#687e8e] hover:text-white text-xs px-2.5 py-1.5 rounded-lg hover:bg-[#111820] transition-all"
+          >
+            <IoRefresh className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">New chat</span>
+          </button>
+          <button
+            onClick={() => navigate(-1)}
+            className="text-[#687e8e] hover:text-white text-xs px-2.5 py-1.5 rounded-lg hover:bg-[#111820] transition-all"
+          >
+            ← Back
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+
+        {/* Capabilities card — collapsible */}
+        <div className="bg-gradient-to-b from-[#0d1f1a] to-[#0d1117] border border-[#1ee3bf]/15 rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setCardOpen((o) => !o)}
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <FaRobot className="h-4 w-4 text-[#1ee3bf]" />
+              <span className="text-white text-sm font-semibold">What can Tipex AI do?</span>
+            </div>
+            {cardOpen
+              ? <IoChevronUp className="h-4 w-4 text-[#687e8e]" />
+              : <IoChevronDown className="h-4 w-4 text-[#687e8e]" />}
+          </button>
+
+          {cardOpen && (
+            <>
+              <div className="px-3 pb-3 flex flex-wrap gap-2">
+                {COMMANDS.map((item) => (
+                  <button
+                    key={item.label}
+                    disabled={busy}
+                    onClick={() => { setInput(""); sendMessage(item.msg); }}
+                    className="flex items-center gap-2 px-3 py-2 bg-[#0a0f15] border border-[#1e2a35] rounded-xl text-left transition-all group disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#1ee3bf]/40 hover:bg-[#0a1f1a]"
+                  >
+                    <span className="text-base shrink-0">{item.icon}</span>
+                    <div>
+                      <p className="text-white text-xs font-semibold">{item.label}</p>
+                      <p className="text-[#687e8e] text-[10px] leading-tight">{item.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[#2a3a4a] text-xs text-center pb-3">
+                Or type naturally — e.g. "create a salary agent" or "pause my agent"
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* Chat messages */}
+        {(() => {
+          // Skip the auto-greeting "hello" user bubble
+          const visibleTimeline = timeline.filter((e, i) => !(i === 0 && e.kind === "user" && e.text?.toLowerCase() === "hello"));
+
+          // When busy, pull the last user message before slots render
+          const lastEntry = visibleTimeline[visibleTimeline.length - 1];
+          const pendingUserEntry = busy && lastEntry?.kind === "user" ? lastEntry : null;
+          const displayTimeline = pendingUserEntry ? visibleTimeline.slice(0, -1) : visibleTimeline;
+
+          const isError = (text) => typeof text === "string" && (text.startsWith("Error:") || text.startsWith("Error "));
+
+          const renderEntry = (entry, i) => {
+            if (entry.kind === "user") {
+              return (
+                <div key={i} className="flex justify-end">
+                  <div className="max-w-[78%] px-4 py-2.5 rounded-2xl rounded-tr-sm bg-[#1ee3bf] text-black text-sm font-medium leading-relaxed shadow-sm">
+                    {entry.text}
+                  </div>
+                </div>
+              );
+            }
+
+            if (entry.kind === "agent_text") {
+              const error = isError(entry.text);
+              return (
+                <div key={i} className="flex justify-start gap-2">
+                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center mt-1 shrink-0 ${error ? "bg-red-500/10" : "bg-[#1ee3bf]/10"}`}>
+                    <FaRobot className={`h-3.5 w-3.5 ${error ? "text-red-400" : "text-[#1ee3bf]"}`} />
+                  </div>
+                  <div className={`max-w-[78%] px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed ${
+                    error
+                      ? "bg-red-500/10 border border-red-500/30 text-red-300"
+                      : "bg-[#111820] border border-[#1e2a35] text-[#d0dce8]"
+                  }`}>
+                    {error && <span className="text-red-400 font-semibold mr-1">⚠</span>}
+                    {entry.text}
+                  </div>
+                </div>
+              );
+            }
+
+            if (entry.kind === "tool") {
+              if (entry.status !== "running" && entry.renderData !== undefined) {
+                return (
+                  <div key={i} className="flex justify-start gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center mt-1 shrink-0">
+                      <FaRobot className="h-3.5 w-3.5 text-[#1ee3bf]" />
+                    </div>
+                    <div className="max-w-[88%] w-full">{renderToolResult(entry)}</div>
+                  </div>
+                );
+              }
+              if (entry.status === "running") {
+                const label = TOOL_LABELS[entry.toolName] || "Working…";
+                return (
+                  <div key={i} className="flex justify-start gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center mt-1 shrink-0">
+                      <FaRobot className="h-3.5 w-3.5 text-[#1ee3bf] animate-pulse" />
+                    </div>
+                    <div className="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-[#111820] border border-[#1e2a35] flex items-center gap-2">
+                      <span className="flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-[#1ee3bf] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="w-1.5 h-1.5 bg-[#1ee3bf] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="w-1.5 h-1.5 bg-[#1ee3bf] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </span>
+                      <span className="text-[#687e8e] text-xs">{label}</span>
+                    </div>
+                  </div>
+                );
+              }
+            }
+            return null;
+          };
+
+          const slotsBlock = slots.length > 0 ? (
+            <div className="flex justify-start gap-2">
+              <div className="h-7 w-7 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center mt-1 shrink-0">
+                <FaRobot className="h-3.5 w-3.5 text-[#1ee3bf]" />
+              </div>
+              <div className="max-w-[88%] w-full space-y-3">
+                {slots.map((slot) => <div key={slot.id}>{renderSlot(slot)}</div>)}
+              </div>
+            </div>
+          ) : null;
+
+          return (
+            <>
+              {displayTimeline.map((entry, i) => renderEntry(entry, i))}
+
+              {/* Stay slots before the pending user message */}
+              {slotsBlock}
+
+              {/* Pending user message */}
+              {pendingUserEntry && renderEntry(pendingUserEntry, "pending")}
+
+              {/* Streaming text */}
+              {streamingText && (
+                <div className="flex justify-start gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center mt-1 shrink-0">
+                    <FaRobot className="h-3.5 w-3.5 text-[#1ee3bf]" />
+                  </div>
+                  <div className="max-w-[78%] px-4 py-2.5 rounded-2xl rounded-tl-sm bg-[#111820] border border-[#1e2a35] text-[#d0dce8] text-sm leading-relaxed">
+                    {streamingText}
+                    <span className="inline-block w-0.5 h-3.5 bg-[#1ee3bf] animate-pulse ml-0.5 align-middle rounded-full" />
+                  </div>
+                </div>
+              )}
+
+              {/* Thinking dots — only when busy and nothing else showing */}
+              {busy && !streamingText && slots.length === 0 && !runningTool && (
+                <div className="flex justify-start gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center mt-1 shrink-0">
+                    <FaRobot className="h-3.5 w-3.5 text-[#1ee3bf] animate-pulse" />
+                  </div>
+                  <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-[#111820] border border-[#1e2a35] flex items-center gap-2">
+                    <span className="flex gap-1">
+                      <span className="w-1.5 h-1.5 bg-[#687e8e] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 bg-[#687e8e] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 bg-[#687e8e] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </span>
+                    <span className="text-[#3a4a5a] text-xs">Thinking…</span>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="px-4 pt-2 pb-3 border-t border-[#1e2a35] bg-[#0a0f15] shrink-0 space-y-2">
+        <div className={`flex items-center gap-3 bg-[#0d1117] border rounded-2xl px-4 py-2.5 transition-colors ${busy ? "border-[#1e2a35] opacity-70" : "border-[#1e2a35] focus-within:border-[#1ee3bf]/40"}`}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={busy}
+            placeholder={
+              busy
+                ? (runningLabel || "Tipex AI is working…")
+                : "Ask anything — type a command or question"
+            }
+            className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-[#3a4a5a] disabled:cursor-not-allowed"
+          />
+          <button
+            onClick={submit}
+            disabled={!input.trim() || busy}
+            className="h-8 w-8 rounded-xl bg-[#1ee3bf] text-black flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#17c9aa] active:scale-95 transition-all shrink-0"
+          >
+            <IoSend className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <p className="text-[#1e2a35] text-xs text-center">
+          Powered by Glove · WDK · Base Sepolia
+        </p>
       </div>
     </div>
+  );
+}
+
+// ── Page wrapper ──────────────────────────────────────────────────────────────
+const CreatePaymentAgent = () => {
+  // A new key forces GloveProvider to remount with a fresh MemoryStore.
+  // Initialized from Date.now() so every page mount starts a clean session.
+  const [chatKey, setChatKey] = useState(() => Date.now());
+  return (
+    <GloveProvider key={chatKey} client={gloveClient}>
+      <AgentChat onNewChat={() => setChatKey(Date.now())} />
+    </GloveProvider>
   );
 };
 

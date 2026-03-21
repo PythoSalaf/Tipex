@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import {
   CreatePaymentAgent,
@@ -7,8 +8,14 @@ import {
   Layout,
   LogPage,
 } from "./pages";
+import { startAgentEngine, stopAgentEngine } from "./lib/agentEngine";
 
 function App() {
+  useEffect(() => {
+    startAgentEngine();
+    return () => stopAgentEngine();
+  }, []);
+
   return (
     <>
       <Routes>
