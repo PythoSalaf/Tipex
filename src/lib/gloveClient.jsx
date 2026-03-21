@@ -39,7 +39,12 @@ function AgentCreatedCard({ data: d }) {
       setTxHash(hash);
       setAmount("");
     } catch (err) {
-      setFundErr(err.message || "Transfer failed");
+      const msg = err.message || "";
+      if (msg.includes("INSUFFICIENT_FUNDS") || msg.includes("insufficient funds for intrinsic")) {
+        setFundErr("no_gas");
+      } else {
+        setFundErr(msg || "Transfer failed");
+      }
     } finally {
       setFunding(false);
     }
@@ -102,7 +107,24 @@ function AgentCreatedCard({ data: d }) {
               {funding ? "Sending…" : "Fund"}
             </button>
           </div>
-          {fundErr && <p className="text-red-400 text-xs">{fundErr}</p>}
+          {fundErr === "no_gas" ? (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2.5 space-y-1.5">
+              <p className="text-yellow-400 text-xs font-semibold">⚠ No ETH for gas on Base Sepolia</p>
+              <p className="text-yellow-400/80 text-xs">
+                USDC transfers need ETH to pay gas fees. Your Base Sepolia ETH balance is 0.
+              </p>
+              <a
+                href="https://www.alchemy.com/faucets/base-sepolia"
+                target="_blank"
+                rel="noreferrer"
+                className="block text-xs text-yellow-400 underline hover:text-yellow-300"
+              >
+                Get free Base Sepolia ETH → alchemy.com/faucets/base-sepolia
+              </a>
+            </div>
+          ) : fundErr ? (
+            <p className="text-red-400 text-xs">{fundErr}</p>
+          ) : null}
           <p className="text-[#2a3a4a] text-xs">Or fund manually later — agent stays inactive until it has enough USDC</p>
         </div>
       )}
