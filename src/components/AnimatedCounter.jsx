@@ -19,7 +19,7 @@ const AnimatedCounter = ({
     const isInView = useInView(ref, { once: true, margin: "-50px" });
     const [displayValue, setDisplayValue] = useState(0);
 
-    // Parse the value - handle both numbers and strings like "1200 USDT"
+    // Parse the value - handle both numbers and strings like "1200 USDC"
     const numericValue = typeof value === 'string'
         ? parseFloat(value.replace(/[^0-9.-]/g, '')) || 0
         : value;

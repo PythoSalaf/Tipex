@@ -502,7 +502,7 @@ const collectPaymentDetailsTool = defineTool({
         <p className="text-white text-sm font-medium">{props.instruction}</p>
         <div className="space-y-2">
           <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
-            <label className="text-[#687e8e] text-xs block mb-1">Amount (USDT)</label>
+            <label className="text-[#687e8e] text-xs block mb-1">Amount (USDC)</label>
             <input
               type="number"
               min="0.01"
@@ -528,7 +528,7 @@ const collectPaymentDetailsTool = defineTool({
             </div>
           </div>
           <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
-            <label className="text-[#687e8e] text-xs block mb-1">Min Balance (USDT) — agent won't pay below this</label>
+            <label className="text-[#687e8e] text-xs block mb-1">Min Balance (USDC) — agent won't pay below this</label>
             <input
               type="number"
               min="0"
@@ -571,7 +571,7 @@ const reviewAndConfirmTool = defineTool({
     ruleType: z.string().describe("Payment type"),
     name: z.string().describe("Recipient name"),
     address: z.string().describe("Recipient wallet address"),
-    amount: z.number().describe("USDT amount per payment"),
+    amount: z.number().describe("USDC amount per payment"),
     schedule: z.string().describe("Payment frequency"),
     minBal: z.number().describe("Minimum agent wallet balance"),
     chain: z.string().describe("Blockchain network"),
