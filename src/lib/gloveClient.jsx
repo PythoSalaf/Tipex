@@ -268,13 +268,15 @@ async function groqChat(messages, tools) {
 function parseLlamaFunctionCalls(text) {
   const calls = [];
 
-  // Format 1: <function=name(args?)>  or  <function=name/>
+  // Format 1: <function=name(args?)>  or  <function=name/>  (self-contained, ends with >)
   const parenRegex = /<function=(\w+)(?:\(([^]*?)\)|\/?)>/g;
   // Format 2: <function=name>args?</function>  OR  <function=name>args?<function>
   const bodyRegex = /<function=(\w+)>([^]*?)(?:<\/function>|<function>)/g;
+  // Format 3: <function=name(args?)></function>  (paren-style with explicit closing tag — actual Groq output)
+  const parenCloseRegex = /<function=(\w+)\(([^]*?)\)<\/function>/g;
 
   const seen = new Set();
-  for (const regex of [parenRegex, bodyRegex]) {
+  for (const regex of [parenCloseRegex, parenRegex, bodyRegex]) {
     let match;
     while ((match = regex.exec(text)) !== null) {
       if (seen.has(match.index)) continue;
@@ -299,6 +301,7 @@ function parseLlamaFunctionCalls(text) {
 // Strip all Llama function-call syntax from text (all known formats)
 function stripLlamaFunctionCalls(text) {
   return text
+    .replace(/<function=\w+\([^]*?\)<\/function>/g, "")               // paren + explicit close
     .replace(/<function=\w+>[^]*?(?:<\/function>|<function>)/g, "")  // body-style
     .replace(/<function=\w+(?:\([^]*?\)|\/?)>/g, "")                  // paren/self-closing
     .replace(/<\/?function>/g, "")                                     // stray tags
@@ -1809,6 +1812,7 @@ Your job is to guide users through creating autonomous on-chain USDC payment age
 - After \`create_agent_wallet\`, STOP — do not call \`choose_payment_type\` or any other tool.
 - For \`delete_agent\`: call it directly — it handles the confirmation UI, do NOT ask "are you sure?" in text.
 - For \`edit_agent\`: call it directly with the agent name — it handles the form, do NOT collect changes via text.
+- For \`fund_agent\`: call it directly — it handles the USDC transfer and ETH gas automatically. NEVER tell users to fund manually.
 - NEVER list options or collect info via plain text — always use the appropriate tool.
 - chain is always "Base" (Base Sepolia testnet).
 - Responses between tool calls: 1-2 sentences max.
@@ -1820,7 +1824,8 @@ Your job is to guide users through creating autonomous on-chain USDC payment age
 - "resume X" / "start X" / "enable X" → if X is named, call \`resume_agent\` directly; if no agent specified, call \`select_agent\` (action: "resume") first, then call \`resume_agent\`
 - "delete X" / "remove X" → if X is named, call \`delete_agent\` directly; if no agent specified, call \`select_agent\` (action: "delete") first, then call \`delete_agent\`
 - "edit X" / "change X" / "update X" → if X is named, call \`edit_agent\` directly; if no agent specified, call \`select_agent\` (action: "edit") first, then call \`edit_agent\`
-- "fund X" / "top up X" / "add USDC to X" / "I want to fund" → if X is named, call \`fund_agent\` directly; if no agent specified, call \`select_agent\` (action: "fund") first, then call \`fund_agent\`
+- "fund X" / "top up X" / "add USDC to X" / "I want to fund" / "fund this agent" → if X is named, call \`fund_agent\` directly; if no agent specified, call \`select_agent\` (action: "fund") first, then call \`fund_agent\`
+- CRITICAL: NEVER tell users to fund manually or explain that "you don't need a tool". ALWAYS call \`fund_agent\` — it handles the transaction automatically.
 - "logs" / "history" / "transactions" → \`check_logs\` (agentName optional — omit for all agents)
 - "next payment" / "when does X pay" → \`next_payment\` (agentName optional — omit for all agents)
 - "show agents" / "list agents" → \`list_agents\`
