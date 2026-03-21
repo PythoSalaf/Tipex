@@ -191,7 +191,7 @@ let activeModelIndex = 0;
 async function groqChatWithModel(model, messages, tools) {
   const body = { model, messages, max_tokens: 800, stream: false };
   if (tools?.length) { body.tools = tools; body.tool_choice = "auto"; }
-  const res = await fetch("/api/chat", {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
     body: JSON.stringify(body),
