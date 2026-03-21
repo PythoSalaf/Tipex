@@ -4,7 +4,120 @@ import { z } from "zod";
 import { getAgents, saveAgents, getLogs } from "./agentStore";
 import { initEvmWallet } from "./wdkWallet";
 import { getUSDCBalance, getETHBalance } from "./getBalance";
+import { sendUSDC } from "./sendPayment";
 import { EXPLORER_TX } from "./constants";
+
+// ── Agent Created card with inline funding ────────────────────────────────────
+function AgentCreatedCard({ data: d }) {
+  const [amount, setAmount]     = useState("");
+  const [funding, setFunding]   = useState(false);
+  const [txHash, setTxHash]     = useState(null);
+  const [fundErr, setFundErr]   = useState("");
+  const [copied, setCopied]     = useState(false);
+
+  const copy = () => {
+    navigator.clipboard.writeText(d.agentWalletAddress);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleFund = async () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) return;
+    setFunding(true);
+    setFundErr("");
+    try {
+      const seed = localStorage.getItem("seed");
+      if (!seed) throw new Error("Wallet not connected");
+      const { wdk } = initEvmWallet(seed);
+      const masterAccount = await wdk.getAccount("ethereum", 0);
+      const { txHash: hash } = await sendUSDC({
+        account: masterAccount,
+        recipient: d.agentWalletAddress,
+        amount: amt,
+      });
+      setTxHash(hash);
+      setAmount("");
+    } catch (err) {
+      setFundErr(err.message || "Transfer failed");
+    } finally {
+      setFunding(false);
+    }
+  };
+
+  return (
+    <div className="bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-2xl p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center text-base">🤖</div>
+        <div>
+          <p className="text-white text-sm font-semibold">Agent Created!</p>
+          <p className="text-[#687e8e] text-xs capitalize">{d.ruleType} · {d.amount} USDC · {d.schedule}</p>
+        </div>
+      </div>
+
+      {/* Wallet address */}
+      <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3">
+        <p className="text-[#687e8e] text-xs mb-1.5">Agent Wallet</p>
+        <div className="flex items-center gap-2">
+          <p className="text-white text-xs font-mono break-all flex-1">{d.agentWalletAddress}</p>
+          <button onClick={copy} className="text-[#687e8e] hover:text-[#1ee3bf] transition-colors shrink-0 text-xs">
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+      </div>
+
+      {/* Fund agent section */}
+      {txHash ? (
+        <div className="bg-[#0d1117] border border-[#1ee3bf]/20 rounded-xl p-3 space-y-1.5">
+          <p className="text-[#1ee3bf] text-xs font-semibold">✓ Agent funded!</p>
+          <a
+            href={`${EXPLORER_TX}/${txHash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[#687e8e] hover:text-[#1ee3bf] text-xs font-mono truncate block transition-colors"
+          >
+            {txHash.slice(0, 20)}…{txHash.slice(-6)} ↗
+          </a>
+        </div>
+      ) : (
+        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3 space-y-2">
+          <p className="text-[#687e8e] text-xs">Fund agent wallet now (from your main wallet)</p>
+          <div className="flex gap-2">
+            <div className="flex-1 flex items-center bg-[#0a0f15] border border-[#1e2a35] rounded-lg px-3 focus-within:border-[#1ee3bf]/40 transition-colors">
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={`e.g. ${d.amount * 5}`}
+                className="flex-1 bg-transparent text-white text-sm outline-none py-2 min-w-0"
+              />
+              <span className="text-[#3a4a5a] text-xs ml-1 shrink-0">USDC</span>
+            </div>
+            <button
+              onClick={handleFund}
+              disabled={funding || !amount}
+              className="px-4 py-2 bg-[#1ee3bf] text-black text-xs font-semibold rounded-lg hover:bg-[#17c9aa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+            >
+              {funding ? "Sending…" : "Fund"}
+            </button>
+          </div>
+          {fundErr && <p className="text-red-400 text-xs">{fundErr}</p>}
+          <p className="text-[#2a3a4a] text-xs">Or fund manually later — agent stays inactive until it has enough USDC</p>
+        </div>
+      )}
+
+      <a
+        href={`https://sepolia.basescan.org/address/${d.agentWalletAddress}`}
+        target="_blank"
+        rel="noreferrer"
+        className="block text-center text-xs text-[#687e8e] hover:text-[#1ee3bf] transition-colors"
+      >
+        View on Basescan ↗
+      </a>
+    </div>
+  );
+}
 
 // ── Groq (fetch-based, browser-safe) ─────────────────────────────────────────
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
@@ -735,38 +848,8 @@ const createAgentWalletTool = defineTool({
     );
   },
   renderResult({ data }) {
-    if (!data) return null;
-    const d = data;
-    if (!d.agentWalletAddress) return null;
-    const copy = () => navigator.clipboard.writeText(d.agentWalletAddress);
-    return (
-      <div className="bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-2xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center text-base">🤖</div>
-          <div>
-            <p className="text-white text-sm font-semibold">Agent Created!</p>
-            <p className="text-[#687e8e] text-xs capitalize">{d.ruleType} · {d.amount} USDC · {d.schedule}</p>
-          </div>
-        </div>
-        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3">
-          <p className="text-[#687e8e] text-xs mb-1.5">Agent Wallet — fund this to activate</p>
-          <div className="flex items-center gap-2">
-            <p className="text-white text-xs font-mono break-all flex-1">{d.agentWalletAddress}</p>
-            <button onClick={copy} className="text-[#687e8e] hover:text-[#1ee3bf] transition-colors shrink-0 text-xs">
-              Copy
-            </button>
-          </div>
-        </div>
-        <a
-          href={`https://sepolia.basescan.org/address/${d.agentWalletAddress}`}
-          target="_blank"
-          rel="noreferrer"
-          className="block text-center text-xs text-[#687e8e] hover:text-[#1ee3bf] transition-colors"
-        >
-          View on Basescan ↗
-        </a>
-      </div>
-    );
+    if (!data?.agentWalletAddress) return null;
+    return <AgentCreatedCard data={data} />;
   },
 });
 
