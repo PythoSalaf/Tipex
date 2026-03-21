@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { GoZap } from "react-icons/go";
 import { LuBrain } from "react-icons/lu";
 import { FaRobot } from "react-icons/fa6";
@@ -7,6 +9,13 @@ import { GiStaryu } from "react-icons/gi";
 import { EmblaRow, WorkCard } from "../components";
 
 const Home = () => {
+  const navigate = useNavigate();
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    setIsConnected(!!localStorage.getItem("seed"));
+  }, []);
+
   const workData = [
     {
       id: 1,
@@ -68,13 +77,19 @@ const Home = () => {
             & conditional transfers on-chain using USD₮ and XAU₮ all hands-free.
           </p>
           <div className="mt-10 flex items-center gap-x-8">
-            <div className="">
-              <button className="bg-[#1ee3bf] text-black px-4 text-base  font-semibold cursor-pointer rounded-2xl py-1.5">
+            {!isConnected && (
+              <button
+                onClick={() => navigate("/")}
+                className="bg-[#1ee3bf] text-black px-4 text-base font-semibold cursor-pointer rounded-2xl py-1.5"
+              >
                 Connect Wallet
               </button>
-            </div>
-            <button className="border border-[#23a272] px-5 py-1.5 rounded-2xl font-semibold cursor-pointer  ">
-              Get started
+            )}
+            <button
+              onClick={() => navigate(isConnected ? "/create-agent" : "/dashboard")}
+              className="border border-[#23a272] px-5 py-1.5 rounded-2xl font-semibold cursor-pointer"
+            >
+              {isConnected ? "Create Agent" : "Get started"}
             </button>
           </div>
         </div>
@@ -102,12 +117,16 @@ const Home = () => {
             Ready to automate your payments?
           </h3>
           <p className="text-[#687e8e] text-sm md:text-base lg:text-lg text-center  max-w-xl">
-            Connect your wallet and create your first autonomous payment agent
-            in under a minute.
+            {isConnected
+              ? "Your wallet is connected. Create your first autonomous payment agent now."
+              : "Connect your wallet and create your first autonomous payment agent in under a minute."}
           </p>
           <div className="mt-7 mb-2">
-            <button className="bg-[#1ee3bf] text-black px-4 text-base  font-semibold cursor-pointer rounded-2xl py-1.5">
-              Connect Wallet
+            <button
+              onClick={() => navigate(isConnected ? "/create-agent" : "/")}
+              className="bg-[#1ee3bf] text-black px-4 text-base font-semibold cursor-pointer rounded-2xl py-1.5"
+            >
+              {isConnected ? "Create Agent" : "Connect Wallet"}
             </button>
           </div>
         </div>

@@ -5,7 +5,7 @@ export function initEvmWallet(seed) {
   const { wdk, phrase } = initWDK(seed);
 
   const wdkWithWallet = wdk.registerWallet("ethereum", WalletManagerEvm, {
-    provider: "https://eth.drpc.org",
+    provider: "https://sepolia.base.org",
   });
 
   return {
