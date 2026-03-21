@@ -11,7 +11,7 @@ import { createWallet } from "../lib/createWallet";
 import { loadWallet } from "../lib/loadWallet";
 import { restoreWallet } from "../lib/restoreWallet";
 import { initEvmWallet } from "../lib/wdkWallet";
-import { getUSDTBalance, getETHBalance } from "../lib/getBalance";
+import { getUSDCBalance, getETHBalance } from "../lib/getBalance";
 import { getAgents } from "../lib/agentStore";
 import SeedPhraseModal from "./SeedPhraseModal";
 import RestoreWalletModal from "./RestoreWalletModal";
@@ -240,7 +240,7 @@ const Navbar = () => {
           seed ? (async () => {
             const { wdk } = initEvmWallet(seed);
             const account = await wdk.getAccount("ethereum", 0);
-            const [usdc, ethBase] = await Promise.all([getUSDTBalance(account), getETHBalance(account)]);
+            const [usdc, ethBase] = await Promise.all([getUSDCBalance(account), getETHBalance(account)]);
             return { usdc, ethBase };
           })() : Promise.resolve({ usdc: null, ethBase: null }),
         ]);

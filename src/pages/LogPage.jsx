@@ -55,7 +55,7 @@ const LogPage = () => {
                 {logs.map((log) => (
                   <tr key={log.id} className="border-b border-[#141a1f] text-sm">
                     <td className="px-6 py-4">{statusIcon(log.status)}</td>
-                    <td className="px-6 py-4 font-semibold">{log.amount} USDT</td>
+                    <td className="px-6 py-4 font-semibold">{log.amount} USDC</td>
                     <td className="px-6 py-4 text-[#a8b3c2]">{log.recipient}</td>
                     <td className="px-6 py-4">{log.chain || "Base"}</td>
                     <td className="px-6 py-4 text-[#9aa6b2]">{log.balance ? `$${log.balance}` : "—"}</td>

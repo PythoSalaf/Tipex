@@ -75,7 +75,7 @@ const Dashboard = () => {
       icon: <IoPlayOutline className="h-5 w-5 md:h-6 md:w-6 text-[#1ee3bf]" />,
     },
     {
-      amount: agents.reduce((sum, a) => sum + (Number(a.amount) || 0), 0) + " USDT",
+      amount: agents.reduce((sum, a) => sum + (Number(a.amount) || 0), 0) + " USDC",
       label: "Total Scheduled",
       icon: <IoMdTime className="h-5 w-5 md:h-6 md:w-6 text-[#1ee3bf]" />,
     },
@@ -224,7 +224,7 @@ const Dashboard = () => {
                         <div>
                           <h3 className="flex flex-wrap items-center gap-2">
                             <span className="text-[#1ee3bf] capitalize">{agent.ruleType}</span>
-                            <span className="font-bold">{agent.amount} USDT</span>
+                            <span className="font-bold">{agent.amount} USDC</span>
                             <FaArrowRight className="text-[#687e8e]" />
                             <span className="font-bold">{agent.name}</span>
                             {agent.active ? (

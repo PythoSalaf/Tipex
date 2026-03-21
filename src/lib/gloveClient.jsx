@@ -3,7 +3,7 @@ import { GloveClient, defineTool, createRemoteModel, MemoryStore } from "glove-r
 import { z } from "zod";
 import { getAgents, saveAgents, getLogs } from "./agentStore";
 import { initEvmWallet } from "./wdkWallet";
-import { getUSDTBalance, getETHBalance } from "./getBalance";
+import { getUSDCBalance, getETHBalance } from "./getBalance";
 import { EXPLORER_TX } from "./constants";
 
 // ── Groq (fetch-based, browser-safe) ─────────────────────────────────────────
@@ -41,6 +41,29 @@ async function groqChatWithModel(model, messages, tools) {
       // Long TPD/daily limit — signal caller to try next model
       throw Object.assign(new Error("RATE_LIMIT_DAILY"), { isDaily: true });
     }
+    // Groq rejects native function-call format with 400 tool_use_failed.
+    // Rescue by parsing the failed_generation field ourselves.
+    if (res.status === 400) {
+      try {
+        const errJson = JSON.parse(errText);
+        const failedGen = errJson?.error?.failed_generation;
+        if (failedGen && errJson?.error?.code === "tool_use_failed") {
+          const nativeCalls = parseLlamaFunctionCalls(failedGen);
+          if (nativeCalls.length > 0) {
+            return {
+              choices: [{
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: nativeCalls,
+                },
+              }],
+              usage: {},
+            };
+          }
+        }
+      } catch { /* fall through to generic error */ }
+    }
     throw new Error(`Groq ${res.status}: ${errText}`);
   }
   return res.json();
@@ -65,8 +88,12 @@ async function groqChat(messages, tools) {
         const nativeCalls = parseLlamaFunctionCalls(msg.content);
         if (nativeCalls.length > 0) {
           msg.tool_calls = nativeCalls;
-          msg.content = msg.content.replace(/<function=\w+(?:\([^]*?\)|\/?)>/g, "").trim() || null;
+          msg.content = stripLlamaFunctionCalls(msg.content) || null;
         }
+      }
+      // If the model produced both text AND tool calls (reasoning leak), clear the text
+      if (msg?.tool_calls?.length && msg.content) {
+        msg.content = null;
       }
 
       return data;
@@ -83,27 +110,50 @@ async function groqChat(messages, tools) {
 }
 
 // Parse Llama's native function call formats:
-//   <function=name({"key":"val"})>
-//   <function=name()>
-//   <function=name/>
+//   <function=name({"key":"val"})>         — paren-style with args
+//   <function=name()>  /  <function=name/> — paren/self-closing, no args
+//   <function=name>{"key":"val"}</function> — body-style, named close
+//   <function=name>{"key":"val"}<function>  — body-style, bare close (actual Groq output)
+// Only the FIRST call is extracted — the model must call one tool per turn.
 function parseLlamaFunctionCalls(text) {
   const calls = [];
-  // Matches: with args, empty parens, or self-closing
-  const regex = /<function=(\w+)(?:\(([^]*?)\)|\/?)>/g;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    const name = match[1];
-    let args = {};
-    if (match[2]?.trim()) {
-      try { args = JSON.parse(match[2]); } catch { /* leave empty */ }
+
+  // Format 1: <function=name(args?)>  or  <function=name/>
+  const parenRegex = /<function=(\w+)(?:\(([^]*?)\)|\/?)>/g;
+  // Format 2: <function=name>args?</function>  OR  <function=name>args?<function>
+  const bodyRegex = /<function=(\w+)>([^]*?)(?:<\/function>|<function>)/g;
+
+  const seen = new Set();
+  for (const regex of [parenRegex, bodyRegex]) {
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (seen.has(match.index)) continue;
+      seen.add(match.index);
+      let args = {};
+      const raw = match[2]?.trim();
+      if (raw && raw !== "{}") {
+        try { args = JSON.parse(raw); } catch { /* leave empty */ }
+      }
+      calls.push({
+        id: `tool_${Date.now()}_${calls.length}`,
+        type: "function",
+        function: { name: match[1], arguments: JSON.stringify(args) },
+      });
     }
-    calls.push({
-      id: `tool_${Date.now()}_${calls.length}`,
-      type: "function",
-      function: { name, arguments: JSON.stringify(args) },
-    });
   }
-  return calls;
+
+  // Return only the first call — sequential tool use must happen across turns
+  return calls.slice(0, 1);
+}
+
+// Strip all Llama function-call syntax from text (all known formats)
+function stripLlamaFunctionCalls(text) {
+  return text
+    .replace(/<function=\w+>[^]*?(?:<\/function>|<function>)/g, "")  // body-style
+    .replace(/<function=\w+(?:\([^]*?\)|\/?)>/g, "")                  // paren/self-closing
+    .replace(/<\/?function>/g, "")                                     // stray tags
+    .replace(/\{\}\s*$/m, "")                                          // trailing {} artifact
+    .trim();
 }
 
 // ── Message format converters ─────────────────────────────────────────────────
@@ -184,7 +234,8 @@ const tipexModel = createRemoteModel(GROQ_MODELS[0], {
     let fullText = "";
     const toolCalls = [];
 
-    if (msg?.content) {
+    // Only show text when the model is NOT also calling a tool (suppress reasoning leaks)
+    if (msg?.content && !msg?.tool_calls?.length) {
       fullText = msg.content;
       yield { type: "text_delta", text: msg.content };
     }
@@ -405,7 +456,7 @@ const collectRecipientTool = defineTool({
 const collectPaymentDetailsTool = defineTool({
   name: "collect_payment_details",
   description:
-    "Show a form to collect the USDT amount, schedule frequency, and minimum balance threshold.",
+    "Show a form to collect the USDC amount, schedule frequency, and minimum balance threshold.",
   inputSchema: z.object({
     instruction: z.string().describe("Brief instruction shown above the form"),
     ruleType: z.string().describe("The type of payment rule already chosen"),
@@ -424,7 +475,7 @@ const collectPaymentDetailsTool = defineTool({
     const details = await display.pushAndWait(input);
     return {
       status: "success",
-      data: `Amount: ${details.amount} USDT, Schedule: ${details.schedule}, Min balance: ${details.minBal} USDT`,
+      data: `Amount: ${details.amount} USDC, Schedule: ${details.schedule}, Min balance: ${details.minBal} USDC`,
       renderData: details,
     };
   },
@@ -501,7 +552,7 @@ const collectPaymentDetailsTool = defineTool({
     const { amount, schedule, minBal } = data;
     return (
       <div className="flex items-center gap-3 px-3 py-2 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-sm">
-        <span className="text-[#1ee3bf] font-semibold">{amount} USDT</span>
+        <span className="text-[#1ee3bf] font-semibold">{amount} USDC</span>
         <span className="text-[#687e8e]">·</span>
         <span className="text-white capitalize">{schedule}</span>
         <span className="text-[#687e8e]">·</span>
@@ -557,9 +608,9 @@ const reviewAndConfirmTool = defineTool({
       ["Type", props.ruleType],
       ["Recipient", props.name],
       ["Wallet", `${props.address.slice(0, 10)}…${props.address.slice(-6)}`],
-      ["Amount", `${props.amount} USDT`],
+      ["Amount", `${props.amount} USDC`],
       ["Schedule", props.schedule],
-      ["Min Balance", `${props.minBal} USDT`],
+      ["Min Balance", `${props.minBal} USDC`],
       ["Chain", props.chain],
     ];
     return (
@@ -670,7 +721,7 @@ const createAgentWalletTool = defineTool({
 
     return {
       status: "success",
-      data: `Agent wallet created successfully! Wallet address: ${agentWalletAddress}. The agent is now active and will autonomously execute ${input.ruleType} payments of ${input.amount} USDT to ${input.name} on a ${input.schedule} basis. Fund the agent wallet to activate it.`,
+      data: `Agent wallet created successfully! Wallet address: ${agentWalletAddress}. The agent is now active and will autonomously execute ${input.ruleType} payments of ${input.amount} USDC to ${input.name} on a ${input.schedule} basis. Fund the agent wallet to activate it.`,
       renderData: displayData,
     };
   },
@@ -694,7 +745,7 @@ const createAgentWalletTool = defineTool({
           <div className="h-8 w-8 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center text-base">🤖</div>
           <div>
             <p className="text-white text-sm font-semibold">Agent Created!</p>
-            <p className="text-[#687e8e] text-xs capitalize">{d.ruleType} · {d.amount} USDT · {d.schedule}</p>
+            <p className="text-[#687e8e] text-xs capitalize">{d.ruleType} · {d.amount} USDC · {d.schedule}</p>
           </div>
         </div>
         <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3">
@@ -714,6 +765,78 @@ const createAgentWalletTool = defineTool({
         >
           View on Basescan ↗
         </a>
+      </div>
+    );
+  },
+});
+
+// 6a. Select agent (picker UI — used before agent-specific actions when no name given)
+const selectAgentTool = defineTool({
+  name: "select_agent",
+  description: "Show a clickable list of agents so the user can pick one. Call this when you need an agent name but the user hasn't specified which agent they mean.",
+  inputSchema: z.object({
+    action: z.string().describe("Short label for what we're doing, e.g. 'check balance', 'pause', 'resume', 'edit', 'delete'"),
+  }),
+  displayPropsSchema: z.object({
+    action: z.string(),
+    agents: z.array(z.object({
+      name: z.string(),
+      ruleType: z.string(),
+      amount: z.number(),
+      schedule: z.string(),
+      active: z.boolean(),
+    })),
+  }),
+  resolveSchema: z.string(),
+  displayStrategy: "hide-on-complete",
+  async do(input, display) {
+    const agents = getAgents();
+    if (!agents.length) {
+      return { status: "error", data: null, message: "No agents found. Create an agent first." };
+    }
+    if (agents.length === 1) {
+      // Auto-select the only agent — no need to show a picker
+      return { status: "success", data: agents[0].name, renderData: { agentName: agents[0].name } };
+    }
+    const selected = await display.pushAndWait({
+      action: input.action,
+      agents: agents.map((a) => ({
+        name: a.name,
+        ruleType: a.ruleType,
+        amount: a.amount,
+        schedule: a.schedule,
+        active: a.active,
+      })),
+    });
+    return { status: "success", data: selected, renderData: { agentName: selected } };
+  },
+  render({ props, resolve }) {
+    return (
+      <div className="space-y-2">
+        <p className="text-[#687e8e] text-xs mb-1">Which agent would you like to {props.action}?</p>
+        {props.agents.map((a) => (
+          <button
+            key={a.name}
+            onClick={() => resolve(a.name)}
+            className="w-full text-left px-4 py-3 rounded-xl bg-[#0d1117] border border-[#1e2a35] hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a] transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-white text-sm font-semibold">{a.name}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${a.active ? "bg-[#1ee3bf]/10 text-[#1ee3bf]" : "bg-yellow-500/10 text-yellow-400"}`}>
+                {a.active ? "Active" : "Paused"}
+              </span>
+            </div>
+            <p className="text-[#687e8e] text-xs mt-0.5 capitalize">{a.ruleType} · {a.amount} USDC · {a.schedule}</p>
+          </button>
+        ))}
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    return (
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+        ✓ {data.agentName}
       </div>
     );
   },
@@ -750,7 +873,7 @@ const listAgentsTool = defineTool({
     if (!agents.length) {
       return { status: "success", data: "The user has no agents yet.", renderData: { agents: [] } };
     }
-    const summary = agents.map(a => `${a.name} (${a.ruleType}, ${a.amount} USDT ${a.schedule}, wallet: ${a.agentWalletAddress}, ${a.active ? "active" : "paused"})`).join("; ");
+    const summary = agents.map(a => `${a.name} (${a.ruleType}, ${a.amount} USDC ${a.schedule}, wallet: ${a.agentWalletAddress}, ${a.active ? "active" : "paused"})`).join("; ");
     return { status: "success", data: `User has ${agents.length} agent(s): ${summary}`, renderData: { agents } };
   },
   render({ props }) {
@@ -776,7 +899,7 @@ const listAgentsTool = defineTool({
                 {a.active ? "Active" : "Paused"}
               </span>
             </div>
-            <p className="text-[#687e8e] text-xs">{a.amount} USDT · {a.schedule}</p>
+            <p className="text-[#687e8e] text-xs">{a.amount} USDC · {a.schedule}</p>
             <p className="text-[#3a4a5a] text-xs font-mono truncate">{a.agentWalletAddress}</p>
           </div>
         ))}
@@ -812,7 +935,7 @@ const checkBalanceTool = defineTool({
   async do(input, display) {
     try {
       const { agent, account } = await resolveAgentWithAccount(input.agentName);
-      const [usdc, eth] = await Promise.all([getUSDTBalance(account), getETHBalance(account)]);
+      const [usdc, eth] = await Promise.all([getUSDCBalance(account), getETHBalance(account)]);
       const displayData = {
         agentName: agent.name,
         agentWalletAddress: agent.agentWalletAddress,
@@ -1334,7 +1457,7 @@ const agentStatusTool = defineTool({
       const enriched = await Promise.all(
         agents.map(async (a) => {
           const account = await wdk.getAccount("ethereum", a.walletIndex);
-          const [usdc, eth] = await Promise.all([getUSDTBalance(account), getETHBalance(account)]);
+          const [usdc, eth] = await Promise.all([getUSDCBalance(account), getETHBalance(account)]);
           const nextRun = computeNextRun(a);
           return {
             name: a.name, ruleType: a.ruleType, active: a.active,
@@ -1407,7 +1530,7 @@ const agentStatusTool = defineTool({
 // ── System prompt ─────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are Tipex AI — an autonomous payment agent creation assistant for the Tipex platform, built on Base Sepolia testnet using Tether's WDK (Wallet Development Kit).
 
-Your job is to guide users through creating autonomous on-chain USDT payment agents. Each agent gets its own dedicated WDK wallet and executes payments automatically based on rules.
+Your job is to guide users through creating autonomous on-chain USDC payment agents. Each agent gets its own dedicated WDK wallet and executes payments automatically based on rules.
 
 ## Your workflow:
 
@@ -1427,6 +1550,7 @@ Your job is to guide users through creating autonomous on-chain USDT payment age
 6. Tell the user to fund the agent wallet to activate it (1 sentence). Stop — do NOT call any more tools.
 
 ## Rules:
+- CRITICAL: Call ONE tool per response. NEVER call two tools in the same message. Wait for each tool's result before calling the next.
 - NEVER call \`choose_payment_type\` unless the user has explicitly said they want to create a new agent.
 - NEVER call any tool without clear user intent for that action.
 - After \`list_agents\`, STOP and wait for user input — do not start the creation flow automatically.
@@ -1438,17 +1562,23 @@ Your job is to guide users through creating autonomous on-chain USDT payment age
 - Responses between tool calls: 1-2 sentences max.
 
 ### Managing existing agents — trigger phrases:
-- "check balance" / "how much in X" → \`check_balance\`
-- "status" / "health" / "overview" → \`agent_status\`
-- "pause X" / "stop X" / "disable X" → \`pause_agent\`
-- "resume X" / "start X" / "enable X" → \`resume_agent\`
-- "delete X" / "remove X" → \`delete_agent\`
-- "edit X" / "change X" / "update X" → \`edit_agent\`
-- "logs" / "history" / "transactions" → \`check_logs\`
-- "next payment" / "when does X pay" → \`next_payment\`
+- "check balance" / "how much in X" → if X is named, call \`check_balance\` directly; if no agent specified, call \`select_agent\` (action: "check balance") first, then call \`check_balance\` with the returned name
+- "status" / "health" / "overview" → \`agent_status\` (agentName optional — omit to show all agents)
+- "pause X" / "stop X" / "disable X" → if X is named, call \`pause_agent\` directly; if no agent specified, call \`select_agent\` (action: "pause") first, then call \`pause_agent\`
+- "resume X" / "start X" / "enable X" → if X is named, call \`resume_agent\` directly; if no agent specified, call \`select_agent\` (action: "resume") first, then call \`resume_agent\`
+- "delete X" / "remove X" → if X is named, call \`delete_agent\` directly; if no agent specified, call \`select_agent\` (action: "delete") first, then call \`delete_agent\`
+- "edit X" / "change X" / "update X" → if X is named, call \`edit_agent\` directly; if no agent specified, call \`select_agent\` (action: "edit") first, then call \`edit_agent\`
+- "logs" / "history" / "transactions" → \`check_logs\` (agentName optional — omit for all agents)
+- "next payment" / "when does X pay" → \`next_payment\` (agentName optional — omit for all agents)
 - "show agents" / "list agents" → \`list_agents\`
 
+### select_agent rule:
+- ALWAYS call \`select_agent\` (never ask in plain text) when you need an agent name but the user hasn't specified one.
+- Call ONE tool per response. STOP after calling \`select_agent\` and wait for the result. Then, in your NEXT response, call the intended tool (check_balance, pause_agent, etc.) using the agent name returned by select_agent.
+- NEVER call two tools in the same response.
+
 Available tools:
+- select_agent: Clickable agent picker — use when agent name is not specified
 - list_agents: Show all existing agents
 - check_balance: USDC + ETH balance of an agent wallet
 - agent_status: Full health report (balance + next run + active state) for one or all agents
@@ -1470,6 +1600,7 @@ export const gloveClient = new GloveClient({
   createStore: (sessionId) => new MemoryStore(sessionId),
   systemPrompt: SYSTEM_PROMPT,
   tools: [
+    selectAgentTool,
     listAgentsTool,
     checkBalanceTool,
     agentStatusTool,

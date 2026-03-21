@@ -1,9 +1,9 @@
-import { USDT_SEPOLIA, USDT_DECIMALS } from "./constants";
+import { USDC_SEPOLIA, USDC_DECIMALS } from "./constants";
 
-// Returns USDT balance as a human-readable number (e.g. 50.5)
-export async function getUSDTBalance(account) {
-  const raw = await account.getTokenBalance(USDT_SEPOLIA);
-  return Number(raw) / Number(10n ** USDT_DECIMALS);
+// Returns USDC balance as a human-readable number (e.g. 50.5)
+export async function getUSDCBalance(account) {
+  const raw = await account.getTokenBalance(USDC_SEPOLIA);
+  return Number(raw) / Number(10n ** USDC_DECIMALS);
 }
 
 // Returns native ETH balance in ETH (not wei)

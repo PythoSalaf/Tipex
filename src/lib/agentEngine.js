@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getAgents, saveAgents, addLog } from "./agentStore";
 import { initEvmWallet } from "./wdkWallet";
-import { getUSDTBalance } from "./getBalance";
-import { sendUSDT } from "./sendPayment";
+import { getUSDCBalance } from "./getBalance";
+import { sendUSDC } from "./sendPayment";
 
 const client = new Anthropic({
   apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
@@ -33,14 +33,14 @@ async function reasonAboutPayment({ agent, balance }) {
 Agent configuration:
 - Rule type: ${agent.ruleType}
 - Recipient: ${agent.name} (${agent.address})
-- Amount: ${agent.amount} USDT
+- Amount: ${agent.amount} USDC
 - Schedule: ${agent.schedule}
-- Minimum balance required: ${agent.minBal} USDT
+- Minimum balance required: ${agent.minBal} USDC
 - Chain: Base Sepolia testnet
 - Last execution: ${agent.lastRun || "never"}
 
 Current state:
-- Agent wallet USDT balance: ${balance.toFixed(4)} USDT
+- Agent wallet USDC balance: ${balance.toFixed(4)} USDC
 
 Your task: Decide whether to execute this payment RIGHT NOW.
 
@@ -68,18 +68,18 @@ Respond with a JSON object only, no markdown:
   if (balance < agent.minBal) {
     return {
       shouldPay: false,
-      reason: `Insufficient balance: ${balance.toFixed(2)} USDT < minimum ${agent.minBal} USDT`,
+      reason: `Insufficient balance: ${balance.toFixed(2)} USDC < minimum ${agent.minBal} USDC`,
     };
   }
   if (balance < agent.amount) {
     return {
       shouldPay: false,
-      reason: `Balance ${balance.toFixed(2)} USDT is less than payment amount ${agent.amount} USDT`,
+      reason: `Balance ${balance.toFixed(2)} USDC is less than payment amount ${agent.amount} USDC`,
     };
   }
   return {
     shouldPay: true,
-    reason: `Balance ${balance.toFixed(2)} USDT satisfies minimum ${agent.minBal} USDT requirement`,
+    reason: `Balance ${balance.toFixed(2)} USDC satisfies minimum ${agent.minBal} USDC requirement`,
   };
 }
 
@@ -92,7 +92,7 @@ async function runAgent(agent, wdk) {
   let balance = 0;
   try {
     const agentAccount = await wdk.getAccount("ethereum", agent.walletIndex);
-    balance = await getUSDTBalance(agentAccount);
+    balance = await getUSDCBalance(agentAccount);
 
     const { shouldPay, reason } = await reasonAboutPayment({ agent, balance });
 
@@ -115,7 +115,7 @@ async function runAgent(agent, wdk) {
     }
 
     // Execute the payment
-    const { txHash } = await sendUSDT({
+    const { txHash } = await sendUSDC({
       account: agentAccount,
       recipient: agent.address,
       amount: agent.amount,
