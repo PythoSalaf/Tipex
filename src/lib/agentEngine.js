@@ -12,6 +12,7 @@ const client = new Anthropic({
 // ── Schedule helpers ──────────────────────────────────────────────────────────
 
 const MS = {
+  "every5min": 5 * 60 * 1000,
   daily: 24 * 60 * 60 * 1000,
   weekly: 7 * 24 * 60 * 60 * 1000,
   monthly: 30 * 24 * 60 * 60 * 1000,

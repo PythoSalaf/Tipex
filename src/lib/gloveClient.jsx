@@ -185,6 +185,7 @@ const tipexModel = createRemoteModel(GROQ_MODEL, {
 // ── Shared utilities ─────────────────────────────────────────────────────────
 
 const SCHEDULE_MS = {
+  "every5min": 300_000,
   daily: 86_400_000,
   weekly: 604_800_000,
   monthly: 2_592_000_000,
@@ -202,6 +203,8 @@ function formatCountdown(date) {
   if (!date) return "Paused";
   const diff = date.getTime() - Date.now();
   if (diff <= 0) return "Overdue";
+  const secs = Math.floor(diff / 1_000);
+  if (secs < 60) return `in ${secs}s`;
   const mins = Math.floor(diff / 60_000);
   if (mins < 60) return `in ${mins}m`;
   const hrs = Math.floor(diff / 3_600_000);
@@ -395,7 +398,13 @@ const collectPaymentDetailsTool = defineTool({
     let amount = "";
     let schedule = "monthly";
     let minBal = "";
-    const scheduleOptions = ["daily", "weekly", "monthly", "yearly"];
+    const scheduleOptions = [
+      { value: "every5min", label: "5 min", badge: "test" },
+      { value: "daily",     label: "Daily" },
+      { value: "weekly",    label: "Weekly" },
+      { value: "monthly",   label: "Monthly" },
+      { value: "yearly",    label: "Yearly" },
+    ];
     const submit = () => {
       const amt = parseFloat(amount);
       const min = parseFloat(minBal);
@@ -423,11 +432,12 @@ const collectPaymentDetailsTool = defineTool({
             <div className="flex gap-2 flex-wrap mt-1">
               {scheduleOptions.map((s) => (
                 <button
-                  key={s}
-                  onClick={() => { schedule = s; }}
-                  className="px-3 py-1 rounded-lg text-xs border border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/50 hover:text-[#1ee3bf] capitalize transition-all"
+                  key={s.value}
+                  onClick={() => { schedule = s.value; }}
+                  className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs border border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/50 hover:text-[#1ee3bf] transition-all"
                 >
-                  {s}
+                  {s.label}
+                  {s.badge && <span className="text-[10px] px-1 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{s.badge}</span>}
                 </button>
               ))}
             </div>
@@ -1026,7 +1036,13 @@ const editAgentTool = defineTool({
         if (!amt || amt <= 0 || !min || min <= 0) return;
         resolve({ amount: amt, schedule, minBal: min });
       };
-      const scheduleOptions = ["daily", "weekly", "monthly", "yearly"];
+      const scheduleOptions = [
+        { value: "every5min", label: "5 min", badge: "test" },
+        { value: "daily",     label: "Daily" },
+        { value: "weekly",    label: "Weekly" },
+        { value: "monthly",   label: "Monthly" },
+        { value: "yearly",    label: "Yearly" },
+      ];
       return (
         <div className="space-y-3">
           <p className="text-white text-sm font-medium">{props.instruction}</p>
@@ -1039,9 +1055,10 @@ const editAgentTool = defineTool({
               <label className="text-[#687e8e] text-xs block mb-1">Schedule</label>
               <div className="flex gap-2 flex-wrap mt-1">
                 {scheduleOptions.map((s) => (
-                  <button key={s} onClick={() => setSchedule(s)}
-                    className={`px-3 py-1 rounded-lg text-xs border capitalize transition-all ${schedule === s ? "border-[#1ee3bf] text-[#1ee3bf] bg-[#0a1f1a]" : "border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/50"}`}>
-                    {s}
+                  <button key={s.value} onClick={() => setSchedule(s.value)}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs border transition-all ${schedule === s.value ? "border-[#1ee3bf] text-[#1ee3bf] bg-[#0a1f1a]" : "border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/50"}`}>
+                    {s.label}
+                    {s.badge && <span className="text-[10px] px-1 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{s.badge}</span>}
                   </button>
                 ))}
               </div>
@@ -1402,7 +1419,7 @@ Available tools:
 - next_payment: When each agent will next execute
 - choose_payment_type: Show 4 payment type buttons (salary, gift, subscription, conditional)
 - collect_recipient_info: Form for recipient name + wallet address
-- collect_payment_details: Form for USDC amount, schedule, min balance
+- collect_payment_details: Form for USDC amount, schedule (every5min/daily/weekly/monthly/yearly), min balance
 - review_and_confirm: Full plan summary for user approval
 - create_agent_wallet: Creates WDK wallet and saves agent (call only after approval)`;
 
