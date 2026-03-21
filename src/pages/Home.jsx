@@ -71,19 +71,19 @@ const Home = () => {
         hidden: { opacity: 0 },
         visible: {
           opacity: 1,
-          transition: { staggerChildren: 0.1, delayChildren: 0.2 }
-        }
+          transition: { staggerChildren: 0.1, delayChildren: 0.2 },
+        },
       };
 
   const itemVariants = shouldReduceMotion
     ? { hidden: { opacity: 0 }, visible: { opacity: 1 } }
     : {
         hidden: { opacity: 0, y: 30 },
-        visible: { 
-          opacity: 1, 
+        visible: {
+          opacity: 1,
           y: 0,
-          transition: { type: "spring", stiffness: 100, damping: 20 }
-        }
+          transition: { type: "spring", stiffness: 100, damping: 20 },
+        },
       };
 
   return (
@@ -131,9 +131,13 @@ const Home = () => {
             transition={{ duration: 0.5 }}
           >
             <motion.div
-              animate={shouldReduceMotion ? {} : {
-                scale: [1, 1.2, 1],
-              }}
+              animate={
+                shouldReduceMotion
+                  ? {}
+                  : {
+                      scale: [1, 1.2, 1],
+                    }
+              }
               transition={{ duration: 2, repeat: Infinity }}
             >
               <GoZap className="h-3 md:h-4 w-3 md:w-4" />
@@ -186,7 +190,14 @@ const Home = () => {
               <motion.button
                 onClick={() => navigate("/")}
                 className="bg-[#1ee3bf] text-black px-4 text-base font-semibold cursor-pointer rounded-2xl py-1.5"
-                whileHover={shouldReduceMotion ? {} : { scale: 1.05, boxShadow: "0 10px 30px rgba(30, 227, 191, 0.3)" }}
+                whileHover={
+                  shouldReduceMotion
+                    ? {}
+                    : {
+                        scale: 1.05,
+                        boxShadow: "0 10px 30px rgba(30, 227, 191, 0.3)",
+                      }
+                }
                 whileTap={shouldReduceMotion ? {} : { scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
               >
@@ -194,9 +205,15 @@ const Home = () => {
               </motion.button>
             )}
             <motion.button
-              onClick={() => navigate(isConnected ? "/create-agent" : "/dashboard")}
+              onClick={() =>
+                navigate(isConnected ? "/create-agent" : "/dashboard")
+              }
               className="border border-[#23a272] px-5 py-1.5 rounded-2xl font-semibold cursor-pointer"
-              whileHover={shouldReduceMotion ? {} : { scale: 1.05, borderColor: "#1ee3bf" }}
+              whileHover={
+                shouldReduceMotion
+                  ? {}
+                  : { scale: 1.05, borderColor: "#1ee3bf" }
+              }
               whileTap={shouldReduceMotion ? {} : { scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
@@ -206,8 +223,8 @@ const Home = () => {
         </div>
       </header>
 
-      <motion.div 
-        className="w-[95%] mx-auto my-20"
+      <motion.div
+        className="w-[95%] mx-auto my-14"
         initial={{ opacity: 0, y: 50 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
@@ -242,16 +259,24 @@ const Home = () => {
         whileInView={{ opacity: 1, scale: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 0.5 }}
-        whileHover={shouldReduceMotion ? {} : {
-          borderColor: "rgba(30, 227, 191, 0.3)",
-          boxShadow: "0 20px 40px rgba(30, 227, 191, 0.1)",
-        }}
+        whileHover={
+          shouldReduceMotion
+            ? {}
+            : {
+                borderColor: "rgba(30, 227, 191, 0.3)",
+                boxShadow: "0 20px 40px rgba(30, 227, 191, 0.1)",
+              }
+        }
       >
         <div className="flex flex-col items-center justify-center">
           <motion.div
-            animate={shouldReduceMotion ? {} : {
-              y: [0, -10, 0],
-            }}
+            animate={
+              shouldReduceMotion
+                ? {}
+                : {
+                    y: [0, -10, 0],
+                  }
+            }
             transition={{
               duration: 2,
               repeat: Infinity,
@@ -272,7 +297,14 @@ const Home = () => {
             <motion.button
               onClick={() => navigate(isConnected ? "/create-agent" : "/")}
               className="bg-[#1ee3bf] text-black px-4 text-base font-semibold cursor-pointer rounded-2xl py-1.5"
-              whileHover={shouldReduceMotion ? {} : { scale: 1.05, boxShadow: "0 10px 30px rgba(30, 227, 191, 0.3)" }}
+              whileHover={
+                shouldReduceMotion
+                  ? {}
+                  : {
+                      scale: 1.05,
+                      boxShadow: "0 10px 30px rgba(30, 227, 191, 0.3)",
+                    }
+              }
               whileTap={shouldReduceMotion ? {} : { scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >

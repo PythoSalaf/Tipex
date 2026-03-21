@@ -3,7 +3,14 @@ import { Link, NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaRobot } from "react-icons/fa6";
 import { PiWalletFill } from "react-icons/pi";
-import { MdMenu, MdClose, MdContentCopy, MdCheckCircle, MdLogout, MdSwapHoriz } from "react-icons/md";
+import {
+  MdMenu,
+  MdClose,
+  MdContentCopy,
+  MdCheckCircle,
+  MdLogout,
+  MdSwapHoriz,
+} from "react-icons/md";
 import { RiExternalLinkLine } from "react-icons/ri";
 import { IoChevronDown } from "react-icons/io5";
 
@@ -17,14 +24,19 @@ import SeedPhraseModal from "./SeedPhraseModal";
 import RestoreWalletModal from "./RestoreWalletModal";
 
 // USDC contract addresses
-const USDC_SEPOLIA    = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"; // Ethereum Sepolia
-const WETH_SEPOLIA    = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"; // Ethereum Sepolia
+const USDC_SEPOLIA = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"; // Ethereum Sepolia
+const WETH_SEPOLIA = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"; // Ethereum Sepolia
 
 async function fetchEthSepoliaBalance(address) {
   const res = await fetch("https://ethereum-sepolia.publicnode.com", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_getBalance",
+      params: [address, "latest"],
+    }),
   });
   const { result } = await res.json();
   return parseInt(result, 16) / 1e18;
@@ -34,8 +46,8 @@ async function fetchEthSepoliaBalance(address) {
 function SwapModal({ onClose, ethSepoliaBalance }) {
   const [tab, setTab] = useState("swap");
   const [fromToken, setFromToken] = useState("ETH");
-  const [toToken, setToToken]     = useState("USDC");
-  const [amount, setAmount]       = useState("");
+  const [toToken, setToToken] = useState("USDC");
+  const [amount, setAmount] = useState("");
 
   const flipTokens = () => {
     setFromToken(toToken);
@@ -44,7 +56,7 @@ function SwapModal({ onClose, ethSepoliaBalance }) {
 
   const uniswapUrl = () => {
     const inp = fromToken === "ETH" ? "ETH" : USDC_SEPOLIA;
-    const out  = toToken   === "ETH" ? "ETH" : USDC_SEPOLIA;
+    const out = toToken === "ETH" ? "ETH" : USDC_SEPOLIA;
     let url = `https://app.uniswap.org/swap?chain=sepolia&inputCurrency=${inp}&outputCurrency=${out}`;
     if (amount) url += `&exactAmount=${amount}&exactField=input`;
     return url;
@@ -62,7 +74,12 @@ function SwapModal({ onClose, ethSepoliaBalance }) {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-white text-sm font-semibold">Swap / Bridge</h3>
-          <button onClick={onClose} className="text-[#687e8e] hover:text-white text-lg leading-none">✕</button>
+          <button
+            onClick={onClose}
+            className="text-[#687e8e] hover:text-white text-lg leading-none"
+          >
+            ✕
+          </button>
         </div>
 
         {/* Tabs */}
@@ -72,7 +89,9 @@ function SwapModal({ onClose, ethSepoliaBalance }) {
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${
-                tab === t ? "bg-[#1ee3bf] text-black" : "text-[#687e8e] hover:text-white"
+                tab === t
+                  ? "bg-[#1ee3bf] text-black"
+                  : "text-[#687e8e] hover:text-white"
               }`}
             >
               {t}
@@ -148,12 +167,15 @@ function SwapModal({ onClose, ethSepoliaBalance }) {
               Swap on Uniswap
               <RiExternalLinkLine className="h-3.5 w-3.5" />
             </a>
-            <p className="text-[#3a4a5a] text-xs text-center mt-2">Opens Uniswap with your tokens pre-selected</p>
+            <p className="text-[#3a4a5a] text-xs text-center mt-2">
+              Opens Uniswap with your tokens pre-selected
+            </p>
           </>
         ) : (
           <>
             <p className="text-[#687e8e] text-xs mb-4">
-              Move ETH from Ethereum Sepolia to Base Sepolia for gas fees in the app.
+              Move ETH from Ethereum Sepolia to Base Sepolia for gas fees in the
+              app.
             </p>
 
             <a
@@ -188,22 +210,27 @@ function SwapModal({ onClose, ethSepoliaBalance }) {
 
 // ── Navbar ────────────────────────────────────────────────────────────────────
 const Navbar = () => {
-  const [address, setAddress]       = useState("");
+  const [address, setAddress] = useState("");
   const [showRestore, setShowRestore] = useState(false);
-  const [loading, setLoading]       = useState(false);
-  const [newSeed, setNewSeed]       = useState("");
+  const [loading, setLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showSwap, setShowSwap]     = useState(false);
-  const [copied, setCopied]         = useState(false);
-  const [balances, setBalances]     = useState({
-    usdc: null, ethBase: null, ethSepolia: null, loadingBal: false,
+  const [showSwap, setShowSwap] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [balances, setBalances] = useState({
+    usdc: null,
+    ethBase: null,
+    ethSepolia: null,
+    loadingBal: false,
   });
+  const [tempSeed, setTempSeed] = useState("");
   const [restoreError, setRestoreError] = useState("");
   const dropdownRef = useRef(null);
 
   // Load wallet on start
   useEffect(() => {
-    loadWallet().then((w) => { if (w) setAddress(w.address); });
+    loadWallet().then((w) => {
+      if (w) setAddress(w.address);
+    });
   }, []);
 
   // Close dropdown on outside click
@@ -218,13 +245,47 @@ const Navbar = () => {
   }, []);
 
   // Create wallet
+  // const handleCreate = async () => {
+  //   if (address) {
+  //     alert("Wallet already connected");
+  //     return;
+  //   }
+  //   setLoading(true);
+  //   const res = await createWallet();
+  //   setAddress(res.address);
+  //   setLoading(false);
+  //   setNewSeed(res.seed);
+  // };
   const handleCreate = async () => {
-    if (address) { alert("Wallet already connected"); return; }
+    if (address) {
+      alert("Wallet already connected");
+      return;
+    }
+
     setLoading(true);
-    const res = await createWallet();
-    setAddress(res.address);
+
+    const res = await createWallet(true);
+    // pass flag if needed, or just generate seed
+
     setLoading(false);
-    setNewSeed(res.seed);
+
+    setTempSeed(res.seed); // store temporarily
+  };
+
+  const handleConfirmSeed = async () => {
+    if (!tempSeed) return;
+
+    const res = await createWallet(tempSeed);
+
+    setAddress(res.address);
+
+    localStorage.setItem("seed", tempSeed);
+
+    setTempSeed("");
+  };
+
+  const handleCancelSeed = () => {
+    setTempSeed("");
   };
 
   // Fetch balances when dropdown opens
@@ -237,16 +298,26 @@ const Navbar = () => {
         const seed = localStorage.getItem("seed");
         const [ethSepolia, baseBalances] = await Promise.all([
           fetchEthSepoliaBalance(address),
-          seed ? (async () => {
-            const { wdk } = initEvmWallet(seed);
-            const account = await wdk.getAccount("ethereum", 0);
-            const [usdc, ethBase] = await Promise.all([getUSDCBalance(account), getETHBalance(account)]);
-            return { usdc, ethBase };
-          })() : Promise.resolve({ usdc: null, ethBase: null }),
+          seed
+            ? (async () => {
+                const { wdk } = initEvmWallet(seed);
+                const account = await wdk.getAccount("ethereum", 0);
+                const [usdc, ethBase] = await Promise.all([
+                  getUSDCBalance(account),
+                  getETHBalance(account),
+                ]);
+                return { usdc, ethBase };
+              })()
+            : Promise.resolve({ usdc: null, ethBase: null }),
         ]);
         setBalances({ ...baseBalances, ethSepolia, loadingBal: false });
       } catch {
-        setBalances({ usdc: null, ethBase: null, ethSepolia: null, loadingBal: false });
+        setBalances({
+          usdc: null,
+          ethBase: null,
+          ethSepolia: null,
+          loadingBal: false,
+        });
       }
     }
   };
@@ -273,13 +344,17 @@ const Navbar = () => {
       setAddress(addr);
       setShowRestore(false);
     } catch (err) {
-      setRestoreError(err?.message || "Invalid seed phrase. Please check and try again.");
+      setRestoreError(
+        err?.message || "Invalid seed phrase. Please check and try again.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const BalSkeleton = () => <div className="h-4 w-14 bg-[#1e2a35] rounded animate-pulse" />;
+  const BalSkeleton = () => (
+    <div className="h-4 w-14 bg-[#1e2a35] rounded animate-pulse" />
+  );
 
   return (
     <>
@@ -293,7 +368,9 @@ const Navbar = () => {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <FaRobot className="w-7 h-7 animate-bounce text-[#1ee3bf]" />
-            <Link to="/" className="text-2xl font-bold text-gradient">Tipex</Link>
+            <Link to="/" className="text-2xl font-bold text-gradient">
+              Tipex
+            </Link>
           </div>
 
           {/* Nav links */}
@@ -315,44 +392,62 @@ const Navbar = () => {
                 >
                   <span className="h-2 w-2 rounded-full bg-[#1ee3bf] animate-pulse" />
                   {address.slice(0, 6)}...{address.slice(-4)}
-                  <IoChevronDown className={`h-3.5 w-3.5 transition-transform ${showDropdown ? "rotate-180" : ""}`} />
+                  <IoChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${showDropdown ? "rotate-180" : ""}`}
+                  />
                 </button>
 
                 {/* Dropdown */}
                 {showDropdown && (
                   <div className="absolute right-0 top-full mt-2 w-80 bg-[#0d1117] border border-[#1e2a35] rounded-2xl shadow-2xl overflow-hidden z-50">
-
                     {/* Header */}
                     <div className="px-4 pt-4 pb-3 border-b border-[#1e2a35]">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-1.5">
                           <span className="h-2 w-2 rounded-full bg-[#1ee3bf] animate-pulse" />
-                          <span className="text-[#1ee3bf] text-xs font-semibold">Base Sepolia</span>
+                          <span className="text-[#1ee3bf] text-xs font-semibold">
+                            Base Sepolia
+                          </span>
                         </div>
                         <span className="text-[#687e8e] text-xs">
-                          {getAgents().length} agent{getAgents().length !== 1 ? "s" : ""}
+                          {getAgents().length} agent
+                          {getAgents().length !== 1 ? "s" : ""}
                         </span>
                       </div>
-                      <p className="text-white text-xs font-mono break-all leading-relaxed">{address}</p>
+                      <p className="text-white text-xs font-mono break-all leading-relaxed">
+                        {address}
+                      </p>
                     </div>
 
                     {/* Base Sepolia balances */}
                     <div className="px-4 pt-3 pb-2">
-                      <p className="text-[#3a4a5a] text-xs uppercase tracking-wider mb-2">Base Sepolia</p>
+                      <p className="text-[#3a4a5a] text-xs uppercase tracking-wider mb-2">
+                        Base Sepolia
+                      </p>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="bg-[#0a1f1a] border border-[#1ee3bf]/15 rounded-xl px-3 py-2">
                           <p className="text-[#687e8e] text-xs mb-0.5">USDC</p>
-                          {balances.loadingBal ? <BalSkeleton /> : (
+                          {balances.loadingBal ? (
+                            <BalSkeleton />
+                          ) : (
                             <p className="text-[#1ee3bf] text-sm font-bold">
-                              {balances.usdc !== null ? balances.usdc.toFixed(2) : "—"}
+                              {balances.usdc !== null
+                                ? balances.usdc.toFixed(2)
+                                : "—"}
                             </p>
                           )}
                         </div>
                         <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2">
-                          <p className="text-[#687e8e] text-xs mb-0.5">ETH (gas)</p>
-                          {balances.loadingBal ? <BalSkeleton /> : (
+                          <p className="text-[#687e8e] text-xs mb-0.5">
+                            ETH (gas)
+                          </p>
+                          {balances.loadingBal ? (
+                            <BalSkeleton />
+                          ) : (
                             <p className="text-white text-sm font-bold">
-                              {balances.ethBase !== null ? balances.ethBase.toFixed(5) : "—"}
+                              {balances.ethBase !== null
+                                ? balances.ethBase.toFixed(5)
+                                : "—"}
                             </p>
                           )}
                         </div>
@@ -361,13 +456,19 @@ const Navbar = () => {
 
                     {/* Ethereum Sepolia balance */}
                     <div className="px-4 pt-2 pb-3 border-b border-[#1e2a35]">
-                      <p className="text-[#3a4a5a] text-xs uppercase tracking-wider mb-2">Ethereum Sepolia</p>
+                      <p className="text-[#3a4a5a] text-xs uppercase tracking-wider mb-2">
+                        Ethereum Sepolia
+                      </p>
                       <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2 flex items-center justify-between">
                         <div>
                           <p className="text-[#687e8e] text-xs mb-0.5">ETH</p>
-                          {balances.loadingBal ? <BalSkeleton /> : (
+                          {balances.loadingBal ? (
+                            <BalSkeleton />
+                          ) : (
                             <p className="text-white text-sm font-bold">
-                              {balances.ethSepolia !== null ? balances.ethSepolia.toFixed(5) : "—"}
+                              {balances.ethSepolia !== null
+                                ? balances.ethSepolia.toFixed(5)
+                                : "—"}
                             </p>
                           )}
                         </div>
@@ -387,7 +488,10 @@ const Navbar = () => {
                     <div className="p-2 space-y-0.5">
                       {/* Swap / Bridge */}
                       <button
-                        onClick={() => { setShowSwap(true); setShowDropdown(false); }}
+                        onClick={() => {
+                          setShowSwap(true);
+                          setShowDropdown(false);
+                        }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#a0b0c0] hover:bg-[#111820] hover:text-white transition-all"
                       >
                         <MdSwapHoriz className="h-4 w-4" />
@@ -398,7 +502,11 @@ const Navbar = () => {
                         onClick={handleCopyAddress}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#a0b0c0] hover:bg-[#111820] hover:text-white transition-all"
                       >
-                        {copied ? <MdCheckCircle className="h-4 w-4 text-[#1ee3bf]" /> : <MdContentCopy className="h-4 w-4" />}
+                        {copied ? (
+                          <MdCheckCircle className="h-4 w-4 text-[#1ee3bf]" />
+                        ) : (
+                          <MdContentCopy className="h-4 w-4" />
+                        )}
                         {copied ? "Copied!" : "Copy address"}
                       </button>
 
@@ -439,7 +547,7 @@ const Navbar = () => {
                   className="border border-[#1ee3bf] text-[#1ee3bf] px-2 py-1 rounded-xl text-sm font-semibold cursor-pointer"
                   onClick={() => setShowRestore(!showRestore)}
                 >
-                  Restore
+                  Restore Wallet
                 </button>
               </div>
             )}
@@ -456,13 +564,26 @@ const Navbar = () => {
       )}
 
       {/* Seed phrase modal */}
-      {newSeed && <SeedPhraseModal seed={newSeed} onClose={() => setNewSeed("")} />}
+      {/* {newSeed && (
+        <SeedPhraseModal seed={newSeed} onClose={() => setNewSeed("")} />
+      )} */}
+
+      {tempSeed && (
+        <SeedPhraseModal
+          seed={tempSeed}
+          onConfirm={handleConfirmSeed}
+          onCancel={handleCancelSeed}
+        />
+      )}
 
       {/* Restore wallet modal */}
       {showRestore && !address && (
         <RestoreWalletModal
           onRestore={handleRestore}
-          onClose={() => { setShowRestore(false); setRestoreError(""); }}
+          onClose={() => {
+            setShowRestore(false);
+            setRestoreError("");
+          }}
           loading={loading}
           error={restoreError}
         />

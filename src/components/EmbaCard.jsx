@@ -7,12 +7,16 @@ const EmbaCard = ({ title, status, schedule, amount, receiver, condition }) => {
 
   return (
     <motion.div
-      className="w-[350px] shrink-0 bg-[#12151c] rounded-xl cursor-pointer"
-      whileHover={shouldReduceMotion ? {} : {
-        scale: 1.02,
-        boxShadow: "0 20px 40px rgba(30, 227, 191, 0.15)",
-        borderColor: "rgba(30, 227, 191, 0.2)",
-      }}
+      className="w-87.5 shrink-0 bg-[#12151c] rounded-xl cursor-pointer"
+      whileHover={
+        shouldReduceMotion
+          ? {}
+          : {
+              scale: 1.02,
+              boxShadow: "0 20px 40px rgba(30, 227, 191, 0.15)",
+              borderColor: "rgba(30, 227, 191, 0.2)",
+            }
+      }
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       <div className="p-3">

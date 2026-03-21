@@ -16,7 +16,7 @@ const EmblaRow = ({ reverse }) => {
       schedule: "Monthly",
       amount: "1200 USD₮",
       receiver: "John",
-      condition: "every 1st if balance > $2000",
+      condition: "if balance > $2000",
     },
     {
       title: "Rent Agent",
@@ -67,10 +67,7 @@ const EmblaRow = ({ reverse }) => {
       viewport={{ once: true, margin: "-50px" }}
       transition={{ duration: 0.6 }}
     >
-      <div
-        className="overflow-hidden"
-        ref={emblaRef}
-      >
+      <div className="overflow-hidden" ref={emblaRef}>
         <div className="flex gap-4">
           {cards.concat(cards).map((card, i) => (
             <motion.div
@@ -79,7 +76,7 @@ const EmblaRow = ({ reverse }) => {
               animate={{ opacity: 1, scale: 1 }}
               transition={{
                 delay: i * 0.1,
-                duration: 0.4
+                duration: 0.4,
               }}
             >
               <EmbaCard {...card} />
