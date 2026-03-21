@@ -1,6 +1,5 @@
 # Tipex — Autonomous Stablecoin Payment Agents
 
-> Built for **[Tether Hackathon Galactica: WDK Edition 1](https://dorahacks.io/hackathon/hackathon-galactica-wdk-2026-01/detail)**
 > Powered by [Tether WDK](https://docs.wdk.tether.io) · [Glove](https://glove.so) · Base Sepolia
 
 Tipex lets you create AI agents that autonomously execute stablecoin payments on-chain — salaries, subscriptions, gifts, and conditional transfers — without any manual intervention. You set the rule once; the agent reasons, decides, and pays.
@@ -278,12 +277,3 @@ The engine ticks every 30 seconds and checks `isDue()`. Within 5 minutes the age
 
 [tipex.vercel.app](https://tipex.vercel.app)
 
----
-
-## Hackathon
-
-**Event:** [Tether Hackathon Galactica: WDK Edition 1](https://dorahacks.io/hackathon/hackathon-galactica-wdk-2026-01/detail)
-
-**Theme:** Agents as economic infrastructure — autonomous systems that hold wallets, move money, and settle value on-chain.
-
-**WDK integration:** All wallet creation, key derivation, balance queries, and token transfers are done through `@tetherto/wdk` and `@tetherto/wdk-wallet-evm`. No third-party wallet service is used anywhere in the stack.
