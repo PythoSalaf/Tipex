@@ -610,6 +610,80 @@ const createAgentWalletTool = defineTool({
   },
 });
 
+// 6. List agents
+const listAgentsTool = defineTool({
+  name: "list_agents",
+  description: "Show the user all their created payment agents. Call this when the user asks about their agents, wants to see them, or asks how many they have.",
+  inputSchema: z.object({}),
+  displayPropsSchema: z.object({
+    agents: z.array(z.object({
+      id: z.number(),
+      name: z.string(),
+      ruleType: z.string(),
+      amount: z.number(),
+      schedule: z.string(),
+      agentWalletAddress: z.string(),
+      active: z.boolean(),
+    })),
+  }),
+  displayStrategy: "hide-on-complete",
+  async do(_input, display) {
+    const agents = getAgents();
+    await display.pushAndForget({ agents: agents.map(a => ({
+      id: a.id,
+      name: a.name,
+      ruleType: a.ruleType,
+      amount: a.amount,
+      schedule: a.schedule,
+      agentWalletAddress: a.agentWalletAddress,
+      active: a.active,
+    })) });
+    if (!agents.length) {
+      return { status: "success", data: "The user has no agents yet.", renderData: { agents: [] } };
+    }
+    const summary = agents.map(a => `${a.name} (${a.ruleType}, ${a.amount} USDT ${a.schedule}, wallet: ${a.agentWalletAddress}, ${a.active ? "active" : "paused"})`).join("; ");
+    return { status: "success", data: `User has ${agents.length} agent(s): ${summary}`, renderData: { agents } };
+  },
+  render({ props }) {
+    const { agents } = props;
+    if (!agents.length) {
+      return (
+        <div className="px-4 py-3 bg-[#0d1117] border border-[#1e2a35] rounded-2xl text-[#687e8e] text-sm">
+          You have no agents yet. Let's create your first one!
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        <p className="text-white text-sm font-semibold mb-1">Your Payment Agents ({agents.length})</p>
+        {agents.map((a) => (
+          <div key={a.id} className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-white text-sm font-semibold">{a.name}</span>
+                <span className="text-[#687e8e] text-xs capitalize">{a.ruleType}</span>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${a.active ? "bg-[#1ee3bf]/10 text-[#1ee3bf]" : "bg-yellow-500/10 text-yellow-400"}`}>
+                {a.active ? "Active" : "Paused"}
+              </span>
+            </div>
+            <p className="text-[#687e8e] text-xs">{a.amount} USDT · {a.schedule}</p>
+            <p className="text-[#3a4a5a] text-xs font-mono truncate">{a.agentWalletAddress}</p>
+          </div>
+        ))}
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    const { agents } = data;
+    return (
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+        📋 {agents.length} agent{agents.length !== 1 ? "s" : ""} listed
+      </div>
+    );
+  },
+});
+
 // ── System prompt ─────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are Tipex AI — an autonomous payment agent creation assistant for the Tipex platform, built on Base Sepolia testnet using Tether's WDK (Wallet Development Kit).
 
@@ -629,10 +703,12 @@ Your job is to guide users through creating autonomous on-chain USDT payment age
 - NEVER list options or collect info via plain text — always use the appropriate tool.
 - After the user picks a type or fills a form, briefly acknowledge in 1 sentence, then call the next tool.
 - chain is always "Base" (Base Sepolia testnet).
+- If the user asks about their agents or wants to see them, call \`list_agents\` immediately.
 - If the user asks a question mid-flow, answer briefly then continue with the next tool.
 - Responses between tool calls: 1-2 sentences max.
 
 Available tools:
+- list_agents: Show all the user's existing payment agents
 - choose_payment_type: Show 4 payment type buttons (salary, gift, subscription, conditional)
 - collect_recipient_info: Form for recipient name + wallet address
 - collect_payment_details: Form for USDT amount, schedule, min balance
@@ -645,6 +721,7 @@ export const gloveClient = new GloveClient({
   createStore: (sessionId) => new MemoryStore(sessionId),
   systemPrompt: SYSTEM_PROMPT,
   tools: [
+    listAgentsTool,
     choosePaymentTypeTool,
     collectRecipientTool,
     collectPaymentDetailsTool,
