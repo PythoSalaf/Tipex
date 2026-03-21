@@ -8,54 +8,78 @@ import { EXPLORER_TX } from "./constants";
 
 // ── Groq (fetch-based, browser-safe) ─────────────────────────────────────────
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_MODEL = "llama-3.3-70b-versatile";
 
-async function groqChat(messages, tools, retries = 3) {
-  const body = {
-    model: GROQ_MODEL,
-    messages,
-    max_tokens: 800,
-    stream: false,
-  };
-  if (tools?.length) {
-    body.tools = tools;
-    body.tool_choice = "auto";
-  }
+// Model waterfall — primary for quality, fallback has a separate daily quota
+const GROQ_MODELS = [
+  "llama-3.3-70b-versatile", // primary — best reasoning
+  "llama-3.1-8b-instant",    // fallback — separate daily quota, much faster
+];
+let activeModelIndex = 0;
+
+async function groqChatWithModel(model, messages, tools) {
+  const body = { model, messages, max_tokens: 800, stream: false };
+  if (tools?.length) { body.tools = tools; body.tool_choice = "auto"; }
   const res = await fetch("/api/chat", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
     body: JSON.stringify(body),
   });
-
-  // Auto-retry on 429 rate limit using the suggested wait time
-  if (res.status === 429 && retries > 0) {
-    const errText = await res.text();
-    const waitMatch = errText.match(/try again in ([\d.]+)s/i);
-    const waitMs = waitMatch ? Math.ceil(parseFloat(waitMatch[1]) * 1000) + 200 : 5000;
-    await new Promise((r) => setTimeout(r, waitMs));
-    return groqChat(messages, tools, retries - 1);
-  }
-
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Groq ${res.status}: ${err}`);
+    const errText = await res.text();
+    // Parse wait time — if it's a short TPM limit (< 60s), retry same model
+    if (res.status === 429) {
+      const secMatch = errText.match(/try again in ([\d.]+)s/i);
+      const minMatch = errText.match(/try again in (\d+)m([\d.]+)s/i);
+      const waitSec = minMatch
+        ? parseInt(minMatch[1]) * 60 + parseFloat(minMatch[2])
+        : secMatch ? parseFloat(secMatch[1]) : 999;
+      if (waitSec < 60) {
+        // Short TPM wait — retry after delay
+        await new Promise((r) => setTimeout(r, Math.ceil(waitSec * 1000) + 300));
+        return groqChatWithModel(model, messages, tools);
+      }
+      // Long TPD/daily limit — signal caller to try next model
+      throw Object.assign(new Error("RATE_LIMIT_DAILY"), { isDaily: true });
+    }
+    throw new Error(`Groq ${res.status}: ${errText}`);
   }
-  const data = await res.json();
+  return res.json();
+}
 
-  // Fallback: parse Llama native <function=name({...})> format from text
-  const msg = data.choices?.[0]?.message;
-  if (msg && !msg.tool_calls?.length && msg.content) {
-    const nativeCalls = parseLlamaFunctionCalls(msg.content);
-    if (nativeCalls.length > 0) {
-      msg.tool_calls = nativeCalls;
-      msg.content = msg.content.replace(/<function=\w+\([\s\S]*?\)>/g, "").trim() || null;
+// Fired when the active model changes — UI can subscribe via onModelSwitch
+let modelSwitchCallback = null;
+export function onModelSwitch(cb) { modelSwitchCallback = cb; }
+
+async function groqChat(messages, tools) {
+  for (let i = activeModelIndex; i < GROQ_MODELS.length; i++) {
+    try {
+      const data = await groqChatWithModel(GROQ_MODELS[i], messages, tools);
+      if (i !== activeModelIndex) {
+        activeModelIndex = i;
+        modelSwitchCallback?.(GROQ_MODELS[i]);
+      }
+
+      // Fallback: parse Llama native <function=name({...})> format from text
+      const msg = data.choices?.[0]?.message;
+      if (msg && !msg.tool_calls?.length && msg.content) {
+        const nativeCalls = parseLlamaFunctionCalls(msg.content);
+        if (nativeCalls.length > 0) {
+          msg.tool_calls = nativeCalls;
+          msg.content = msg.content.replace(/<function=\w+(?:\([^]*?\)|\/?)>/g, "").trim() || null;
+        }
+      }
+
+      return data;
+    } catch (err) {
+      if (err.isDaily && i + 1 < GROQ_MODELS.length) {
+        activeModelIndex = i + 1;
+        modelSwitchCallback?.(GROQ_MODELS[i + 1]);
+        continue;
+      }
+      throw err;
     }
   }
-
-  return data;
+  throw new Error("All Groq models have hit their daily limit. Please try again tomorrow or add a billing method at console.groq.com");
 }
 
 // Parse Llama's native function call formats:
@@ -140,7 +164,7 @@ function gloveToolsToOpenAI(tools) {
 }
 
 // ── Custom Groq model adapter ─────────────────────────────────────────────────
-const tipexModel = createRemoteModel(GROQ_MODEL, {
+const tipexModel = createRemoteModel(GROQ_MODELS[0], {
   async *promptStream(request, signal) {
     const messages = [
       { role: "system", content: request.systemPrompt },

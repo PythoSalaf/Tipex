@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { GloveProvider, useGlove } from "glove-react";
 import { FaRobot } from "react-icons/fa6";
 import { IoSend, IoRefresh, IoChevronDown, IoChevronUp } from "react-icons/io5";
-import { gloveClient } from "../lib/gloveClient";
+import { gloveClient, onModelSwitch } from "../lib/gloveClient";
 
 // ── Tool name → friendly label ────────────────────────────────────────────────
 const TOOL_LABELS = {
@@ -42,9 +42,19 @@ function AgentChat() {
   const { timeline, streamingText, busy, slots, sendMessage, renderSlot, renderToolResult } = useGlove();
   const [input, setInput] = useState("");
   const [cardOpen, setCardOpen] = useState(true);
+  const [modelNotice, setModelNotice] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const hasGreeted = useRef(false);
+
+  // Subscribe to model waterfall switches
+  useEffect(() => {
+    onModelSwitch((model) => {
+      const label = model.includes("8b") ? "llama-3.1-8b-instant (fast)" : model;
+      setModelNotice(`Rate limit hit — switched to ${label}`);
+      setTimeout(() => setModelNotice(null), 8000);
+    });
+  }, []);
 
   // Auto-scroll on new content
   useEffect(() => {
@@ -88,6 +98,15 @@ function AgentChat() {
 
   return (
     <div className="w-full h-screen pt-14 text-white flex flex-col overflow-hidden bg-[#060a0f]">
+
+      {/* Model-switch notice */}
+      {modelNotice && (
+        <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-400 text-xs">
+          <span>⚡</span>
+          <span>{modelNotice}</span>
+          <button onClick={() => setModelNotice(null)} className="ml-auto text-yellow-400/60 hover:text-yellow-400">✕</button>
+        </div>
+      )}
 
       {/* Header */}
       <div className="px-4 py-3 border-b border-[#1e2a35] bg-[#0a0f15] flex items-center justify-between shrink-0">
