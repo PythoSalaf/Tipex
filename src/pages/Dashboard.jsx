@@ -2,9 +2,9 @@ import { FaRobot, FaArrowRight, FaGift } from "react-icons/fa6";
 import { IoPlayOutline, IoBriefcase } from "react-icons/io5";
 import { IoMdTime, IoIosPause } from "react-icons/io";
 import { BsCalendar2Fill } from "react-icons/bs";
-import { RiDeleteBinLine } from "react-icons/ri";
+import { RiDeleteBinLine, RiEditLine } from "react-icons/ri";
 import { GoZap } from "react-icons/go";
-import { IoSwapHorizontal } from "react-icons/io5";
+import { IoSwapHorizontal, IoClose } from "react-icons/io5";
 import { MdContentCopy } from "react-icons/md";
 import { RiExternalLinkLine } from "react-icons/ri";
 import { useState, useEffect } from "react";
@@ -18,8 +18,133 @@ import {
   useAnimationPreferences 
 } from "../lib/animations";
 
+const SCHEDULES = ["every5min", "daily", "weekly", "monthly", "yearly"];
+
+function EditModal({ agent, onSave, onClose }) {
+  const [form, setForm] = useState({
+    name:     agent.name     || "",
+    address:  agent.address  || "",
+    amount:   agent.amount   || "",
+    schedule: agent.schedule || "monthly",
+    minBal:   agent.minBal   || "",
+  });
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSave = () => {
+    if (!form.name || !form.address || !form.amount || !form.minBal) return;
+    onSave({ id: agent.id, ...form, amount: Number(form.amount), minBal: Number(form.minBal) });
+  };
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+
+      <motion.div
+        className="relative w-full max-w-md bg-[#0d1117] border border-[#1e2a35] rounded-2xl p-6 space-y-5 z-10"
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-semibold">Edit Agent</h3>
+            <p className="text-[#687e8e] text-xs capitalize mt-0.5">{agent.ruleType} · wallet index {agent.walletIndex}</p>
+          </div>
+          <button onClick={onClose} className="text-[#687e8e] hover:text-white transition-colors">
+            <IoClose className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Fields */}
+        <div className="space-y-3">
+          <div>
+            <label className="text-[#687e8e] text-xs mb-1.5 block">Recipient Name</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+              className="w-full bg-[#0a0f15] border border-[#1e2a35] focus:border-[#1ee3bf]/40 rounded-xl px-3 py-2.5 text-sm text-white outline-none transition-colors"
+            />
+          </div>
+          <div>
+            <label className="text-[#687e8e] text-xs mb-1.5 block">Recipient Address</label>
+            <input
+              type="text"
+              value={form.address}
+              onChange={(e) => set("address", e.target.value)}
+              className="w-full bg-[#0a0f15] border border-[#1e2a35] focus:border-[#1ee3bf]/40 rounded-xl px-3 py-2.5 text-sm text-white outline-none font-mono transition-colors"
+              placeholder="0x..."
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#687e8e] text-xs mb-1.5 block">Amount (USDC)</label>
+              <input
+                type="number"
+                min="0"
+                value={form.amount}
+                onChange={(e) => set("amount", e.target.value)}
+                className="w-full bg-[#0a0f15] border border-[#1e2a35] focus:border-[#1ee3bf]/40 rounded-xl px-3 py-2.5 text-sm text-white outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-[#687e8e] text-xs mb-1.5 block">Min Balance (USDC)</label>
+              <input
+                type="number"
+                min="0"
+                value={form.minBal}
+                onChange={(e) => set("minBal", e.target.value)}
+                className="w-full bg-[#0a0f15] border border-[#1e2a35] focus:border-[#1ee3bf]/40 rounded-xl px-3 py-2.5 text-sm text-white outline-none transition-colors"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[#687e8e] text-xs mb-1.5 block">Schedule</label>
+            <select
+              value={form.schedule}
+              onChange={(e) => set("schedule", e.target.value)}
+              className="w-full bg-[#0a0f15] border border-[#1e2a35] focus:border-[#1ee3bf]/40 rounded-xl px-3 py-2.5 text-sm text-white outline-none transition-colors"
+            >
+              {SCHEDULES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-[#1e2a35] text-[#687e8e] hover:text-white text-sm transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!form.name || !form.address || !form.amount || !form.minBal}
+            className="flex-1 py-2.5 rounded-xl bg-[#1ee3bf] text-black font-semibold text-sm hover:bg-[#17c9aa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 const Dashboard = () => {
   const [agents, setAgents] = useState([]);
+  const [editingAgent, setEditingAgent] = useState(null);
   const navigate = useNavigate();
   const { shouldReduceMotion } = useAnimationPreferences();
 
@@ -61,6 +186,11 @@ const Dashboard = () => {
 
   const copyAddress = (addr) => {
     navigator.clipboard.writeText(addr);
+  };
+
+  const saveEdit = (updated) => {
+    persist(agents.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
+    setEditingAgent(null);
   };
 
   const dashData = [
@@ -300,6 +430,15 @@ const Dashboard = () => {
                           {agent.active ? "Pause" : "Resume"}
                         </motion.button>
                         <motion.button
+                          onClick={() => setEditingAgent(agent)}
+                          className="w-8 h-8 flex items-center justify-center border border-[#1e2a35] hover:border-[#1ee3bf]/40 rounded-xl transition-all"
+                          whileHover={shouldReduceMotion ? {} : { scale: 1.1 }}
+                          whileTap={shouldReduceMotion ? {} : { scale: 0.9 }}
+                          title="Edit agent"
+                        >
+                          <RiEditLine className="text-[#687e8e] hover:text-white h-4 w-4" />
+                        </motion.button>
+                        <motion.button
                           onClick={() => deleteAgent(agent.id)}
                           className="w-8 h-8 flex items-center justify-center border border-[#1e2a35] hover:border-red-500/40 rounded-xl transition-all"
                           whileHover={shouldReduceMotion ? {} : { scale: 1.1 }}
@@ -317,7 +456,7 @@ const Dashboard = () => {
         </div>
 
         {agents.length > 0 && (
-          <motion.div 
+          <motion.div
             className="mt-6 flex justify-end"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -333,6 +472,17 @@ const Dashboard = () => {
           </motion.div>
         )}
       </div>
+
+      {/* Edit modal */}
+      <AnimatePresence>
+        {editingAgent && (
+          <EditModal
+            agent={editingAgent}
+            onSave={saveEdit}
+            onClose={() => setEditingAgent(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
