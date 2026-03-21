@@ -13,7 +13,6 @@ import {
 } from "react-icons/md";
 import { RiExternalLinkLine } from "react-icons/ri";
 import { IoChevronDown } from "react-icons/io5";
-
 import { createWallet } from "../lib/createWallet";
 import { loadWallet } from "../lib/loadWallet";
 import { restoreWallet } from "../lib/restoreWallet";
