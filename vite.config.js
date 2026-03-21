@@ -6,10 +6,10 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 export default defineConfig({
   server: {
     proxy: {
-      "/api/groq": {
+      "/api/chat": {
         target: "https://api.groq.com",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/groq/, ""),
+        rewrite: () => "/openai/v1/chat/completions",
       },
     },
   },

@@ -18,7 +18,7 @@ async function groqChat(messages, tools) {
     body.tools = tools;
     body.tool_choice = "auto";
   }
-  const res = await fetch("/api/groq/openai/v1/chat/completions", {
+  const res = await fetch("/api/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -30,7 +30,37 @@ async function groqChat(messages, tools) {
     const err = await res.text();
     throw new Error(`Groq ${res.status}: ${err}`);
   }
-  return res.json();
+  const data = await res.json();
+
+  // Fallback: parse Llama native <function=name({...})> format from text
+  const msg = data.choices?.[0]?.message;
+  if (msg && !msg.tool_calls?.length && msg.content) {
+    const nativeCalls = parseLlamaFunctionCalls(msg.content);
+    if (nativeCalls.length > 0) {
+      msg.tool_calls = nativeCalls;
+      msg.content = msg.content.replace(/<function=\w+\([\s\S]*?\)>/g, "").trim() || null;
+    }
+  }
+
+  return data;
+}
+
+// Parse Llama's native <function=tool_name({"key":"val"})> format
+function parseLlamaFunctionCalls(text) {
+  const calls = [];
+  const regex = /<function=(\w+)\(([\s\S]*?)\)>/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const name = match[1];
+    let args = {};
+    try { args = JSON.parse(match[2]); } catch { /* leave empty */ }
+    calls.push({
+      id: `tool_${Date.now()}_${calls.length}`,
+      type: "function",
+      function: { name, arguments: JSON.stringify(args) },
+    });
+  }
+  return calls;
 }
 
 // ── Message format converters ─────────────────────────────────────────────────
