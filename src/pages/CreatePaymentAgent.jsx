@@ -52,6 +52,15 @@ function AgentChat({ onNewChat }) {
     });
   }, []);
 
+  // Bridge: tool renders dispatch this event to send a message without access to sendMessage
+  useEffect(() => {
+    const handler = (e) => {
+      if (!busy) sendMessage(e.detail.text);
+    };
+    window.addEventListener("tipex:sendmsg", handler);
+    return () => window.removeEventListener("tipex:sendmsg", handler);
+  }, [busy, sendMessage]);
+
   // Auto-scroll on new content
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

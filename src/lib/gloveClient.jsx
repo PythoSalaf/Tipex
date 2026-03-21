@@ -152,6 +152,28 @@ function AgentCreatedCard({ data: d }) {
       >
         View on Basescan ↗
       </a>
+
+      {/* Follow-up chips */}
+      {txHash && (
+        <div className="pt-1 space-y-1.5">
+          <p className="text-[#3a4a5a] text-[10px] text-center">What would you like to do next?</p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {[
+              { label: "Check balance",    msg: `check balance of ${d.name}` },
+              { label: "Show all agents",  msg: "show me my agents" },
+              { label: "Create another",   msg: "I want to create a new payment agent" },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                onClick={() => dispatchChatMessage(chip.msg)}
+                className="px-3 py-1 text-xs rounded-xl border border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/40 hover:text-white transition-all"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -222,6 +244,11 @@ async function groqChatWithModel(model, messages, tools) {
 // Fired when the active model changes — UI can subscribe via onModelSwitch
 let modelSwitchCallback = null;
 export function onModelSwitch(cb) { modelSwitchCallback = cb; }
+
+// Bridge: tool renders can dispatch messages back to the chat via CustomEvent
+export function dispatchChatMessage(text) {
+  window.dispatchEvent(new CustomEvent("tipex:sendmsg", { detail: { text } }));
+}
 
 async function groqChat(messages, tools) {
   for (let i = activeModelIndex; i < GROQ_MODELS.length; i++) {
@@ -472,6 +499,27 @@ async function resolveAgentWithAccount(nameInput) {
   return { agent, agents, account };
 }
 
+// ── Shared UI helpers ─────────────────────────────────────────────────────────
+
+// Progress stepper shown at the top of each agent-creation tool
+function StepBar({ step, total, label }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <div className="flex gap-1">
+        {Array.from({ length: total }).map((_, i) => (
+          <div
+            key={i}
+            className={`h-1 rounded-full transition-all ${
+              i < step ? "w-6 bg-[#1ee3bf]" : i === step - 1 ? "w-6 bg-[#1ee3bf]" : "w-3 bg-[#1e2a35]"
+            }`}
+          />
+        ))}
+      </div>
+      <span className="text-[#687e8e] text-[10px]">Step {step} of {total} — {label}</span>
+    </div>
+  );
+}
+
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 // 1. Choose payment type
@@ -504,6 +552,7 @@ const choosePaymentTypeTool = defineTool({
     ];
     return (
       <div className="space-y-2">
+        <StepBar step={1} total={4} label="Payment Type" />
         <p className="text-white text-sm font-medium mb-3">{props.question}</p>
         {options.map((o) => (
           <button
@@ -552,47 +601,58 @@ const collectRecipientTool = defineTool({
     };
   },
   render({ props, resolve }) {
-    let name = "";
-    let address = "";
-    const submit = () => {
-      if (!name.trim() || !address.trim()) return;
-      if (!address.startsWith("0x") || address.length !== 42) {
-        alert("Invalid wallet address. Must start with 0x and be 42 characters.");
-        return;
-      }
-      resolve({ name: name.trim(), address: address.trim() });
-    };
-    return (
-      <div className="space-y-3">
-        <p className="text-white text-sm font-medium">{props.instruction}</p>
-        <div className="space-y-2">
-          <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
-            <label className="text-[#687e8e] text-xs block mb-1">Recipient Name</label>
-            <input
-              type="text"
-              placeholder="e.g. John Smith"
-              className="w-full bg-transparent outline-none text-white text-sm placeholder:text-[#3a4a5a]"
-              onChange={(e) => { name = e.target.value; }}
-            />
+    function RecipientForm() {
+      const [name, setName]       = useState("");
+      const [address, setAddress] = useState("");
+
+      const addrValid   = address.startsWith("0x") && address.length === 42;
+      const addrTouched = address.length > 0;
+      const canSubmit   = name.trim() && addrValid;
+
+      return (
+        <div className="space-y-3">
+          <StepBar step={2} total={4} label="Recipient" />
+          <p className="text-white text-sm font-medium">{props.instruction}</p>
+          <div className="space-y-2">
+            <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
+              <label className="text-[#687e8e] text-xs block mb-1">Recipient Name</label>
+              <input
+                type="text"
+                value={name}
+                placeholder="e.g. John Smith"
+                className="w-full bg-transparent outline-none text-white text-sm placeholder:text-[#3a4a5a]"
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className={`bg-[#0a0f15] border rounded-xl px-3 py-2.5 transition-colors ${addrTouched && !addrValid ? "border-red-500/50" : "border-[#1e2a35] focus-within:border-[#1ee3bf]/40"}`}>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[#687e8e] text-xs">Wallet Address</label>
+                {addrTouched && (
+                  <span className={`text-[10px] font-semibold ${addrValid ? "text-[#1ee3bf]" : "text-red-400"}`}>
+                    {addrValid ? "✓ Valid" : address.length < 42 ? `${address.length}/42 chars` : "✗ Invalid"}
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={address}
+                placeholder="0x..."
+                className="w-full bg-transparent outline-none text-white text-sm font-mono placeholder:text-[#3a4a5a]"
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
-            <label className="text-[#687e8e] text-xs block mb-1">Wallet Address</label>
-            <input
-              type="text"
-              placeholder="0x..."
-              className="w-full bg-transparent outline-none text-white text-sm font-mono placeholder:text-[#3a4a5a]"
-              onChange={(e) => { address = e.target.value; }}
-            />
-          </div>
+          <button
+            onClick={() => canSubmit && resolve({ name: name.trim(), address: address.trim() })}
+            disabled={!canSubmit}
+            className="w-full bg-[#1ee3bf] text-black font-semibold py-2.5 rounded-xl text-sm hover:bg-[#17c9aa] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            Continue →
+          </button>
         </div>
-        <button
-          onClick={submit}
-          className="w-full bg-[#1ee3bf] text-black font-semibold py-2.5 rounded-xl text-sm hover:bg-[#17c9aa] transition-all"
-        >
-          Continue →
-        </button>
-      </div>
-    );
+      );
+    }
+    return <RecipientForm />;
   },
   renderResult({ data }) {
     const { name, address } = data;
@@ -633,73 +693,90 @@ const collectPaymentDetailsTool = defineTool({
     };
   },
   render({ props, resolve }) {
-    let amount = "";
-    let schedule = "monthly";
-    let minBal = "";
     const scheduleOptions = [
-      { value: "every5min", label: "5 min", badge: "test" },
+      { value: "every5min", label: "5 min",   badge: "test" },
       { value: "daily",     label: "Daily" },
       { value: "weekly",    label: "Weekly" },
       { value: "monthly",   label: "Monthly" },
       { value: "yearly",    label: "Yearly" },
     ];
-    const submit = () => {
-      const amt = parseFloat(amount);
-      const min = parseFloat(minBal);
-      if (!amt || amt <= 0) return;
-      if (!min || min <= 0) return;
-      resolve({ amount: amt, schedule, minBal: min });
-    };
-    return (
-      <div className="space-y-3">
-        <p className="text-white text-sm font-medium">{props.instruction}</p>
-        <div className="space-y-2">
-          <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
-            <label className="text-[#687e8e] text-xs block mb-1">Amount (USDC)</label>
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              placeholder="e.g. 1200"
-              className="w-full bg-transparent outline-none text-white text-sm placeholder:text-[#3a4a5a]"
-              onChange={(e) => { amount = e.target.value; }}
-            />
-          </div>
-          <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5">
-            <label className="text-[#687e8e] text-xs block mb-1">Schedule</label>
-            <div className="flex gap-2 flex-wrap mt-1">
-              {scheduleOptions.map((s) => (
-                <button
-                  key={s.value}
-                  onClick={() => { schedule = s.value; }}
-                  className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs border border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/50 hover:text-[#1ee3bf] transition-all"
-                >
-                  {s.label}
-                  {s.badge && <span className="text-[10px] px-1 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{s.badge}</span>}
-                </button>
-              ))}
+    function DetailsForm() {
+      const [amount,   setAmount]   = useState("");
+      const [schedule, setSchedule] = useState("monthly");
+      const [minBal,   setMinBal]   = useState("");
+
+      // Auto-suggest 2× amount as min balance when amount changes
+      const handleAmountChange = (val) => {
+        setAmount(val);
+        const n = parseFloat(val);
+        if (n > 0 && !minBal) setMinBal(String(n * 2));
+      };
+
+      const canSubmit = parseFloat(amount) > 0 && parseFloat(minBal) > 0;
+
+      return (
+        <div className="space-y-3">
+          <StepBar step={3} total={4} label="Payment Details" />
+          <p className="text-white text-sm font-medium">{props.instruction}</p>
+          <div className="space-y-2">
+            <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
+              <label className="text-[#687e8e] text-xs block mb-1">Amount (USDC)</label>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={amount}
+                placeholder="e.g. 1200"
+                className="w-full bg-transparent outline-none text-white text-sm placeholder:text-[#3a4a5a]"
+                onChange={(e) => handleAmountChange(e.target.value)}
+              />
+            </div>
+            <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5">
+              <label className="text-[#687e8e] text-xs block mb-1">Schedule</label>
+              <div className="flex gap-2 flex-wrap mt-1">
+                {scheduleOptions.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => setSchedule(s.value)}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs border transition-all ${
+                      schedule === s.value
+                        ? "border-[#1ee3bf] text-[#1ee3bf] bg-[#0a1f1a]"
+                        : "border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/50"
+                    }`}
+                  >
+                    {s.label}
+                    {s.badge && <span className="text-[10px] px-1 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{s.badge}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[#687e8e] text-xs">Min Balance (USDC)</label>
+                <span className="text-[#3a4a5a] text-[10px]">agent pauses below this</span>
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={minBal}
+                placeholder="e.g. 2400"
+                className="w-full bg-transparent outline-none text-white text-sm placeholder:text-[#3a4a5a]"
+                onChange={(e) => setMinBal(e.target.value)}
+              />
             </div>
           </div>
-          <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
-            <label className="text-[#687e8e] text-xs block mb-1">Min Balance (USDC) — agent won't pay below this</label>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="e.g. 2000"
-              className="w-full bg-transparent outline-none text-white text-sm placeholder:text-[#3a4a5a]"
-              onChange={(e) => { minBal = e.target.value; }}
-            />
-          </div>
+          <button
+            onClick={() => canSubmit && resolve({ amount: parseFloat(amount), schedule, minBal: parseFloat(minBal) })}
+            disabled={!canSubmit}
+            className="w-full bg-[#1ee3bf] text-black font-semibold py-2.5 rounded-xl text-sm hover:bg-[#17c9aa] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            Continue →
+          </button>
         </div>
-        <button
-          onClick={submit}
-          className="w-full bg-[#1ee3bf] text-black font-semibold py-2.5 rounded-xl text-sm hover:bg-[#17c9aa] transition-all"
-        >
-          Continue →
-        </button>
-      </div>
-    );
+      );
+    }
+    return <DetailsForm />;
   },
   renderResult({ data }) {
     const { amount, schedule, minBal } = data;
@@ -768,6 +845,7 @@ const reviewAndConfirmTool = defineTool({
     ];
     return (
       <div className="space-y-3">
+        <StepBar step={4} total={4} label="Review & Confirm" />
         <p className="text-white text-sm font-semibold">Review Agent Configuration</p>
         <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl overflow-hidden">
           {rows.map(([label, value], i) => (
@@ -1003,29 +1081,77 @@ const listAgentsTool = defineTool({
     const { agents } = props;
     if (!agents.length) {
       return (
-        <div className="px-4 py-3 bg-[#0d1117] border border-[#1e2a35] rounded-2xl text-[#687e8e] text-sm">
-          You have no agents yet. Let's create your first one!
+        <div className="px-4 py-8 bg-[#0d1117] border border-[#1e2a35] rounded-2xl text-center space-y-3">
+          <p className="text-[#687e8e] text-sm">You have no agents yet.</p>
+          <button
+            onClick={() => dispatchChatMessage("I want to create a new payment agent")}
+            className="px-4 py-2 bg-[#1ee3bf] text-black text-xs font-semibold rounded-xl hover:bg-[#17c9aa] transition-all"
+          >
+            Create your first agent →
+          </button>
+        </div>
+      );
+    }
+    function AgentListCard({ a }) {
+      const [copied, setCopied] = useState(false);
+      const copy = () => {
+        navigator.clipboard.writeText(a.agentWalletAddress);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      };
+      return (
+        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-white text-sm font-semibold">{a.name}</span>
+              <span className="text-[#687e8e] text-xs capitalize">{a.ruleType}</span>
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${a.active ? "bg-[#1ee3bf]/10 text-[#1ee3bf]" : "bg-yellow-500/10 text-yellow-400"}`}>
+              {a.active ? "Active" : "Paused"}
+            </span>
+          </div>
+          <p className="text-[#687e8e] text-xs">{a.amount} USDC · {a.schedule}</p>
+          {/* Copyable wallet address */}
+          <button
+            onClick={copy}
+            className="flex items-center gap-1.5 group w-full"
+            title="Copy address"
+          >
+            <span className="text-[#3a4a5a] text-xs font-mono truncate group-hover:text-[#687e8e] transition-colors">
+              {a.agentWalletAddress.slice(0, 14)}…{a.agentWalletAddress.slice(-8)}
+            </span>
+            <span className={`text-[10px] shrink-0 transition-colors ${copied ? "text-[#1ee3bf]" : "text-[#2a3a4a] group-hover:text-[#687e8e]"}`}>
+              {copied ? "Copied!" : "copy"}
+            </span>
+          </button>
+          {/* Quick actions */}
+          <div className="flex gap-1.5 pt-0.5">
+            <button
+              onClick={() => dispatchChatMessage(`check balance of ${a.name}`)}
+              className="flex-1 text-xs py-1.5 rounded-lg border border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/40 hover:text-white transition-all"
+            >
+              💰 Balance
+            </button>
+            <button
+              onClick={() => dispatchChatMessage(`fund ${a.name}`)}
+              className="flex-1 text-xs py-1.5 rounded-lg border border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/40 hover:text-white transition-all"
+            >
+              ⬆ Fund
+            </button>
+            <button
+              onClick={() => dispatchChatMessage(a.active ? `pause ${a.name}` : `resume ${a.name}`)}
+              className="flex-1 text-xs py-1.5 rounded-lg border border-[#1e2a35] text-[#687e8e] hover:border-yellow-500/40 hover:text-yellow-400 transition-all"
+            >
+              {a.active ? "⏸ Pause" : "▶ Resume"}
+            </button>
+          </div>
         </div>
       );
     }
     return (
       <div className="space-y-2">
         <p className="text-white text-sm font-semibold mb-1">Your Payment Agents ({agents.length})</p>
-        {agents.map((a) => (
-          <div key={a.id} className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-white text-sm font-semibold">{a.name}</span>
-                <span className="text-[#687e8e] text-xs capitalize">{a.ruleType}</span>
-              </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${a.active ? "bg-[#1ee3bf]/10 text-[#1ee3bf]" : "bg-yellow-500/10 text-yellow-400"}`}>
-                {a.active ? "Active" : "Paused"}
-              </span>
-            </div>
-            <p className="text-[#687e8e] text-xs">{a.amount} USDC · {a.schedule}</p>
-            <p className="text-[#3a4a5a] text-xs font-mono truncate">{a.agentWalletAddress}</p>
-          </div>
-        ))}
+        {agents.map((a) => <AgentListCard key={a.id} a={a} />)}
       </div>
     );
   },

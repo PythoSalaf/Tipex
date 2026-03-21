@@ -7,10 +7,12 @@ import { GoZap } from "react-icons/go";
 import { IoSwapHorizontal, IoClose } from "react-icons/io5";
 import { MdContentCopy } from "react-icons/md";
 import { RiExternalLinkLine } from "react-icons/ri";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAgents, saveAgents } from "../lib/agentStore";
+import { getUSDCBalance } from "../lib/getBalance";
+import { initEvmWallet } from "../lib/wdkWallet";
 import { 
   staggerContainer, 
   staggerItem, 
@@ -143,8 +145,10 @@ function EditModal({ agent, onSave, onClose }) {
 }
 
 const Dashboard = () => {
-  const [agents, setAgents] = useState([]);
+  const [agents, setAgents]         = useState([]);
   const [editingAgent, setEditingAgent] = useState(null);
+  // balances: { [agentId]: number | null }
+  const [balances, setBalances]     = useState({});
   const navigate = useNavigate();
   const { shouldReduceMotion } = useAnimationPreferences();
 
@@ -155,6 +159,29 @@ const Dashboard = () => {
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch USDC balances for all agents (non-blocking, best-effort)
+  const fetchBalances = useCallback(async (agentList) => {
+    const seed = localStorage.getItem("seed");
+    if (!seed || !agentList.length) return;
+    try {
+      const { wdk } = initEvmWallet(seed);
+      const results = await Promise.allSettled(
+        agentList.map(async (a) => {
+          const acc = await wdk.getAccount("ethereum", a.walletIndex);
+          const usdc = await getUSDCBalance(acc);
+          return { id: a.id, usdc };
+        })
+      );
+      const map = {};
+      results.forEach((r) => { if (r.status === "fulfilled") map[r.value.id] = r.value.usdc; });
+      setBalances(map);
+    } catch { /* silently skip if wallet not ready */ }
+  }, []);
+
+  useEffect(() => {
+    if (agents.length) fetchBalances(agents);
+  }, [agents, fetchBalances]);
 
   const persist = (updated) => {
     saveAgents(updated);
@@ -383,6 +410,20 @@ const Dashboard = () => {
                               {agent.schedule}
                             </span>
                             <span>Min bal: ${agent.minBal}</span>
+                            {/* Live balance health */}
+                            {balances[agent.id] !== undefined ? (
+                              balances[agent.id] < agent.minBal ? (
+                                <span className="flex items-center gap-1 text-red-400 font-medium">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
+                                  Low funds ({balances[agent.id].toFixed(1)} USDC)
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-[#1ee3bf]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#1ee3bf] inline-block" />
+                                  {balances[agent.id].toFixed(1)} USDC
+                                </span>
+                              )
+                            ) : null}
                             {agent.lastRun && (
                               <span>Last run: {new Date(agent.lastRun).toLocaleDateString()}</span>
                             )}
