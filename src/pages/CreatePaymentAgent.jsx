@@ -69,38 +69,50 @@ function AgentChat() {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
 
         {/* Capabilities card — always shown at top */}
-        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-2xl p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center shrink-0">
-              <FaRobot className="h-3.5 w-3.5 text-[#1ee3bf]" />
+        <div className="bg-gradient-to-b from-[#0d1f1a] to-[#0d1117] border border-[#1ee3bf]/15 rounded-2xl overflow-hidden">
+          {/* Header */}
+          <div className="px-4 pt-4 pb-3 flex items-center gap-3 border-b border-[#1e2a35]">
+            <div className="h-10 w-10 rounded-xl bg-[#1ee3bf]/10 border border-[#1ee3bf]/20 flex items-center justify-center shrink-0">
+              <FaRobot className="h-5 w-5 text-[#1ee3bf]" />
             </div>
             <div>
-              <p className="text-white text-sm font-semibold">Tipex AI</p>
-              <p className="text-[#687e8e] text-xs">Your autonomous payment agent assistant</p>
+              <p className="text-white text-sm font-bold">What can I help you with?</p>
+              <p className="text-[#687e8e] text-xs">Click a command or type naturally below</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+
+          {/* Command buttons */}
+          <div className="p-3 grid grid-cols-2 gap-2">
             {[
-              { icon: "🤖", label: "Create agent", desc: "Set up a new autonomous payment" },
-              { icon: "📋", label: "List agents", desc: "View all your payment agents" },
-              { icon: "💰", label: "Check balance", desc: "USDC + ETH in any agent wallet" },
-              { icon: "📊", label: "Agent status", desc: "Full health report for agents" },
-              { icon: "⏸", label: "Pause / Resume", desc: "Control agent execution" },
-              { icon: "✏️", label: "Edit agent", desc: "Update amount, schedule, limits" },
-              { icon: "🗑", label: "Delete agent", desc: "Remove an agent permanently" },
-              { icon: "📜", label: "Payment logs", desc: "View transaction history" },
-              { icon: "🕐", label: "Next payment", desc: "See upcoming payment schedule" },
+              { icon: "🤖", label: "Create agent",   desc: "Set up a new autonomous payment", msg: "I want to create a new payment agent", color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
+              { icon: "📋", label: "List agents",    desc: "View all your payment agents",    msg: "show me my agents",                  color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
+              { icon: "💰", label: "Check balance",  desc: "USDC + ETH in an agent wallet",   msg: "check balance",                      color: "hover:border-blue-500/40 hover:bg-blue-500/5" },
+              { icon: "📊", label: "Agent status",   desc: "Full health report for agents",   msg: "show me agent status",               color: "hover:border-purple-500/40 hover:bg-purple-500/5" },
+              { icon: "⏸", label: "Pause agent",    desc: "Pause an agent's payments",       msg: "pause an agent",                     color: "hover:border-yellow-500/40 hover:bg-yellow-500/5" },
+              { icon: "▶", label: "Resume agent",   desc: "Restart a paused agent",          msg: "resume an agent",                    color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
+              { icon: "✏️", label: "Edit agent",     desc: "Update amount or schedule",       msg: "I want to edit an agent",            color: "hover:border-orange-500/40 hover:bg-orange-500/5" },
+              { icon: "🗑", label: "Delete agent",   desc: "Remove an agent permanently",     msg: "delete an agent",                    color: "hover:border-red-500/40 hover:bg-red-500/5" },
+              { icon: "📜", label: "Payment logs",   desc: "View transaction history",        msg: "show payment logs",                  color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
+              { icon: "🕐", label: "Next payment",   desc: "See upcoming payment schedule",   msg: "when is the next payment",           color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
             ].map((item) => (
-              <div key={item.label} className="flex items-start gap-2 px-3 py-2 bg-[#0a0f15] border border-[#1e2a35] rounded-xl">
-                <span className="text-sm shrink-0 mt-0.5">{item.icon}</span>
-                <div>
-                  <p className="text-white text-xs font-semibold">{item.label}</p>
-                  <p className="text-[#687e8e] text-xs leading-tight">{item.desc}</p>
+              <button
+                key={item.label}
+                disabled={busy}
+                onClick={() => { setInput(""); sendMessage(item.msg); }}
+                className={`flex items-center gap-3 px-3 py-3 bg-[#0a0f15] border border-[#1e2a35] rounded-xl text-left transition-all group disabled:opacity-40 disabled:cursor-not-allowed ${item.color}`}
+              >
+                <span className="text-lg shrink-0 group-hover:scale-110 transition-transform">{item.icon}</span>
+                <div className="min-w-0">
+                  <p className="text-white text-xs font-semibold truncate">{item.label}</p>
+                  <p className="text-[#687e8e] text-xs leading-tight truncate">{item.desc}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
-          <p className="text-[#3a4a5a] text-xs text-center">Just type naturally — e.g. "create a salary agent" or "check ken's balance"</p>
+
+          <p className="text-[#2a3a4a] text-xs text-center pb-3">
+            Or type naturally — e.g. "create a salary agent" or "check ken's balance"
+          </p>
         </div>
 
         {(() => {
