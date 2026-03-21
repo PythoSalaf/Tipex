@@ -100,7 +100,7 @@ function SwapModal({ onClose, ethSepoliaBalance }) {
 
         {tab === "swap" ? (
           <>
-            <p className="text-[#687e8e] text-xs mb-3">
+            <p className="text-[#687e8e] text-xs md:text-sm mb-3">
               Swap tokens on Ethereum Sepolia via Uniswap
             </p>
 
