@@ -1,13 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { getAgents, saveAgents, addLog } from "./agentStore";
 import { initEvmWallet } from "./wdkWallet";
-import { getUSDCBalance } from "./getBalance";
-import { sendUSDC } from "./sendPayment";
-
-const client = new Anthropic({
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
-  dangerouslyAllowBrowser: true,
-});
+import { getUSDCBalance, getETHBalance } from "./getBalance";
+import { sendUSDC, sendETH } from "./sendPayment";
 
 // ── Schedule helpers ──────────────────────────────────────────────────────────
 
@@ -25,46 +19,9 @@ function isDue(agent) {
   return elapsed >= (MS[agent.schedule] || MS.monthly);
 }
 
-// ── AI reasoning ─────────────────────────────────────────────────────────────
+// ── Payment reasoning ─────────────────────────────────────────────────────────
 
-async function reasonAboutPayment({ agent, balance }) {
-  const prompt = `You are an autonomous payment agent reasoning engine.
-
-Agent configuration:
-- Rule type: ${agent.ruleType}
-- Recipient: ${agent.name} (${agent.address})
-- Amount: ${agent.amount} USDC
-- Schedule: ${agent.schedule}
-- Minimum balance required: ${agent.minBal} USDC
-- Chain: Base Sepolia testnet
-- Last execution: ${agent.lastRun || "never"}
-
-Current state:
-- Agent wallet USDC balance: ${balance.toFixed(4)} USDC
-
-Your task: Decide whether to execute this payment RIGHT NOW.
-
-Respond with a JSON object only, no markdown:
-{
-  "shouldPay": true or false,
-  "reason": "one concise sentence explaining your decision"
-}`;
-
-  try {
-    const response = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 200,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const text = response.content[0]?.text || "";
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-  } catch {
-    // fallback: simple rule-based decision
-  }
-
-  // Fallback logic if AI call fails
+function reasonAboutPayment({ agent, balance }) {
   if (balance < agent.minBal) {
     return {
       shouldPay: false,
@@ -83,6 +40,9 @@ Respond with a JSON object only, no markdown:
   };
 }
 
+// How much ETH to keep in agent wallet for gas. ~10 USDC transfers on Base Sepolia.
+const GAS_RESERVE_ETH = 0.003;
+
 // ── Run a single agent ────────────────────────────────────────────────────────
 
 async function runAgent(agent, wdk) {
@@ -91,10 +51,25 @@ async function runAgent(agent, wdk) {
 
   let balance = 0;
   try {
-    const agentAccount = await wdk.getAccount("ethereum", agent.walletIndex);
+    const agentAccount  = await wdk.getAccount("ethereum", agent.walletIndex);
+    const masterAccount = await wdk.getAccount("ethereum", 0);
+
+    // Auto-top-up: ensure agent wallet has enough ETH for gas
+    const agentEth = await getETHBalance(agentAccount);
+    if (agentEth < GAS_RESERVE_ETH) {
+      const masterEth = await getETHBalance(masterAccount);
+      if (masterEth >= GAS_RESERVE_ETH + 0.001) { // keep a small buffer on master
+        await sendETH({
+          account: masterAccount,
+          recipient: agent.agentWalletAddress,
+          amountEth: GAS_RESERVE_ETH,
+        });
+      }
+    }
+
     balance = await getUSDCBalance(agentAccount);
 
-    const { shouldPay, reason } = await reasonAboutPayment({ agent, balance });
+    const { shouldPay, reason } = reasonAboutPayment({ agent, balance });
 
     if (!shouldPay) {
       addLog({

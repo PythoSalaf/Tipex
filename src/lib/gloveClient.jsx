@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAgents, saveAgents, getLogs } from "./agentStore";
 import { initEvmWallet } from "./wdkWallet";
 import { getUSDCBalance, getETHBalance } from "./getBalance";
-import { sendUSDC } from "./sendPayment";
+import { sendUSDC, sendETH } from "./sendPayment";
 import { EXPLORER_TX } from "./constants";
 
 // ── Agent Created card with inline funding ────────────────────────────────────
@@ -21,6 +21,8 @@ function AgentCreatedCard({ data: d }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const GAS_RESERVE_ETH = 0.003; // enough for ~10+ USDC transfers on Base Sepolia
+
   const handleFund = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
@@ -31,6 +33,19 @@ function AgentCreatedCard({ data: d }) {
       if (!seed) throw new Error("Wallet not connected");
       const { wdk } = initEvmWallet(seed);
       const masterAccount = await wdk.getAccount("ethereum", 0);
+      const agentAccount  = await wdk.getAccount("ethereum", d.walletIndex);
+
+      // Check agent ETH balance; top up from master if below threshold
+      const agentEth = await getETHBalance(agentAccount);
+      if (agentEth < GAS_RESERVE_ETH) {
+        await sendETH({
+          account: masterAccount,
+          recipient: d.agentWalletAddress,
+          amountEth: GAS_RESERVE_ETH,
+        });
+      }
+
+      // Send USDC to agent wallet
       const { txHash: hash } = await sendUSDC({
         account: masterAccount,
         recipient: d.agentWalletAddress,
@@ -87,7 +102,7 @@ function AgentCreatedCard({ data: d }) {
         </div>
       ) : (
         <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3 space-y-2">
-          <p className="text-[#687e8e] text-xs">Fund agent wallet now (from your main wallet)</p>
+          <p className="text-[#687e8e] text-xs">Fund agent wallet with USDC — gas ETH included automatically</p>
           <div className="flex gap-2">
             <div className="flex-1 flex items-center bg-[#0a0f15] border border-[#1e2a35] rounded-lg px-3 focus-within:border-[#1ee3bf]/40 transition-colors">
               <input
@@ -125,7 +140,7 @@ function AgentCreatedCard({ data: d }) {
           ) : fundErr ? (
             <p className="text-red-400 text-xs">{fundErr}</p>
           ) : null}
-          <p className="text-[#2a3a4a] text-xs">Or fund manually later — agent stays inactive until it has enough USDC</p>
+          <p className="text-[#2a3a4a] text-xs">0.003 ETH for gas is included automatically with the USDC transfer</p>
         </div>
       )}
 

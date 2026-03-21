@@ -7,6 +7,7 @@ import { gloveClient, onModelSwitch } from "../lib/gloveClient";
 
 // ── Tool name → friendly label ────────────────────────────────────────────────
 const TOOL_LABELS = {
+  select_agent:           "Loading your agents…",
   choose_payment_type:    "Preparing payment options…",
   collect_recipient_info: "Preparing recipient form…",
   collect_payment_details:"Preparing payment details…",
@@ -24,16 +25,10 @@ const TOOL_LABELS = {
 };
 
 const COMMANDS = [
-  { icon: "🤖", label: "Create agent",  desc: "Set up a new autonomous payment",  msg: "I want to create a new payment agent", color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
-  { icon: "📋", label: "List agents",   desc: "View all your payment agents",      msg: "show me my agents",                   color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
-  { icon: "💰", label: "Check balance", desc: "USDC + ETH in an agent wallet",     msg: "check balance",                       color: "hover:border-blue-500/40 hover:bg-blue-500/5" },
-  { icon: "📊", label: "Agent status",  desc: "Full health report for agents",     msg: "show me agent status",                color: "hover:border-purple-500/40 hover:bg-purple-500/5" },
-  { icon: "⏸",  label: "Pause agent",  desc: "Pause an agent's payments",         msg: "pause an agent",                      color: "hover:border-yellow-500/40 hover:bg-yellow-500/5" },
-  { icon: "▶",  label: "Resume agent", desc: "Restart a paused agent",            msg: "resume an agent",                     color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
-  { icon: "✏️",  label: "Edit agent",   desc: "Update amount or schedule",         msg: "I want to edit an agent",             color: "hover:border-orange-500/40 hover:bg-orange-500/5" },
-  { icon: "🗑",  label: "Delete agent", desc: "Remove an agent permanently",       msg: "delete an agent",                     color: "hover:border-red-500/40 hover:bg-red-500/5" },
-  { icon: "📜", label: "Payment logs",  desc: "View transaction history",          msg: "show payment logs",                   color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
-  { icon: "🕐", label: "Next payment",  desc: "See upcoming payment schedule",     msg: "when is the next payment",            color: "hover:border-[#1ee3bf]/50 hover:bg-[#0a1f1a]" },
+  { icon: "🤖", label: "Create agent",  desc: "New autonomous payment",   msg: "I want to create a new payment agent" },
+  { icon: "📋", label: "List agents",   desc: "View all your agents",     msg: "show me my agents" },
+  { icon: "💰", label: "Check balance", desc: "USDC + ETH in wallet",     msg: "check balance" },
+  { icon: "📜", label: "Payment logs",  desc: "Transaction history",      msg: "show payment logs" },
 ];
 
 // ── Inner chat UI ─────────────────────────────────────────────────────────────
@@ -159,24 +154,24 @@ function AgentChat({ onNewChat }) {
 
           {cardOpen && (
             <>
-              <div className="px-3 pb-3 grid grid-cols-2 gap-2">
+              <div className="px-3 pb-3 flex flex-wrap gap-2">
                 {COMMANDS.map((item) => (
                   <button
                     key={item.label}
                     disabled={busy}
                     onClick={() => { setInput(""); sendMessage(item.msg); }}
-                    className={`flex items-center gap-3 px-3 py-3 bg-[#0a0f15] border border-[#1e2a35] rounded-xl text-left transition-all group disabled:opacity-40 disabled:cursor-not-allowed ${item.color}`}
+                    className="flex items-center gap-2 px-3 py-2 bg-[#0a0f15] border border-[#1e2a35] rounded-xl text-left transition-all group disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#1ee3bf]/40 hover:bg-[#0a1f1a]"
                   >
-                    <span className="text-lg shrink-0 group-hover:scale-110 transition-transform">{item.icon}</span>
-                    <div className="min-w-0">
-                      <p className="text-white text-xs font-semibold truncate">{item.label}</p>
-                      <p className="text-[#687e8e] text-xs leading-tight truncate">{item.desc}</p>
+                    <span className="text-base shrink-0">{item.icon}</span>
+                    <div>
+                      <p className="text-white text-xs font-semibold">{item.label}</p>
+                      <p className="text-[#687e8e] text-[10px] leading-tight">{item.desc}</p>
                     </div>
                   </button>
                 ))}
               </div>
               <p className="text-[#2a3a4a] text-xs text-center pb-3">
-                Or type naturally — e.g. "create a salary agent" or "check ken's balance"
+                Or type naturally — e.g. "create a salary agent" or "pause my agent"
               </p>
             </>
           )}
