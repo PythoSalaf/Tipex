@@ -45,15 +45,21 @@ async function groqChat(messages, tools) {
   return data;
 }
 
-// Parse Llama's native <function=tool_name({"key":"val"})> format
+// Parse Llama's native function call formats:
+//   <function=name({"key":"val"})>
+//   <function=name()>
+//   <function=name/>
 function parseLlamaFunctionCalls(text) {
   const calls = [];
-  const regex = /<function=(\w+)\(([\s\S]*?)\)>/g;
+  // Matches: with args, empty parens, or self-closing
+  const regex = /<function=(\w+)(?:\(([^]*?)\)|\/?)>/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
     const name = match[1];
     let args = {};
-    try { args = JSON.parse(match[2]); } catch { /* leave empty */ }
+    if (match[2]?.trim()) {
+      try { args = JSON.parse(match[2]); } catch { /* leave empty */ }
+    }
     calls.push({
       id: `tool_${Date.now()}_${calls.length}`,
       type: "function",
