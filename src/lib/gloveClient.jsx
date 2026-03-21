@@ -625,7 +625,10 @@ const createAgentWalletTool = defineTool({
     agentWalletAddress: z.string(),
     walletIndex: z.number(),
   }),
-  displayStrategy: "stay",
+  // "hide-on-complete" ensures the live slot is removed after the tool finishes,
+  // so the card never lingers into future list_agents calls.
+  // The full "Agent Created" card is rendered via renderResult (timeline entry), not the slot.
+  displayStrategy: "hide-on-complete",
   async do(input, display) {
     const seed = localStorage.getItem("seed");
     if (!seed) {
@@ -634,10 +637,13 @@ const createAgentWalletTool = defineTool({
 
     const { wdk } = initEvmWallet(seed);
     const agents = getAgents();
-    // Use max existing walletIndex + 1 to avoid collisions when agents are deleted/recreated
-    const walletIndex = agents.length > 0 
-      ? Math.max(...agents.map(a => a.walletIndex || 0)) + 1 
+    const walletIndex = agents.length > 0
+      ? Math.max(...agents.map(a => a.walletIndex || 0)) + 1
       : 1;
+
+    // Show a progress indicator in the slot while wallet is being derived
+    await display.pushAndForget({ ruleType: input.ruleType, name: input.name, amount: input.amount, schedule: input.schedule, agentWalletAddress: "", walletIndex });
+
     const agentAccount = await wdk.getAccount("ethereum", walletIndex);
     const agentWalletAddress = await agentAccount.getAddress();
 
@@ -662,8 +668,6 @@ const createAgentWalletTool = defineTool({
       walletIndex,
     };
 
-    await display.pushAndForget(displayData);
-
     return {
       status: "success",
       data: `Agent wallet created successfully! Wallet address: ${agentWalletAddress}. The agent is now active and will autonomously execute ${input.ruleType} payments of ${input.amount} USDT to ${input.name} on a ${input.schedule} basis. Fund the agent wallet to activate it.`,
@@ -671,42 +675,45 @@ const createAgentWalletTool = defineTool({
     };
   },
   render({ props }) {
-    const copy = () => navigator.clipboard.writeText(props.agentWalletAddress);
+    // Slot shown only briefly during wallet derivation
     return (
-      <div className="bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-2xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center text-base">🤖</div>
-          <div>
-            <p className="text-white text-sm font-semibold">Agent Created!</p>
-            <p className="text-[#687e8e] text-xs capitalize">{props.ruleType} · {props.amount} USDT · {props.schedule}</p>
-          </div>
-        </div>
-        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3">
-          <p className="text-[#687e8e] text-xs mb-1.5">Agent Wallet — fund this to activate</p>
-          <div className="flex items-center gap-2">
-            <p className="text-white text-xs font-mono break-all flex-1">{props.agentWalletAddress}</p>
-            <button onClick={copy} className="text-[#687e8e] hover:text-[#1ee3bf] transition-colors shrink-0 text-xs">
-              Copy
-            </button>
-          </div>
-        </div>
-        <a
-          href={`https://sepolia.basescan.org/address/${props.agentWalletAddress}`}
-          target="_blank"
-          rel="noreferrer"
-          className="block text-center text-xs text-[#687e8e] hover:text-[#1ee3bf] transition-colors"
-        >
-          View on Basescan ↗
-        </a>
+      <div className="px-3 py-2 bg-[#0a1f1a] border border-[#1ee3bf]/20 rounded-xl flex items-center gap-2 text-xs text-[#1ee3bf]">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#1ee3bf] animate-pulse" />
+        Creating wallet for {props.name}…
       </div>
     );
   },
   renderResult({ data }) {
     if (!data) return null;
     const d = data;
+    if (!d.agentWalletAddress) return null;
+    const copy = () => navigator.clipboard.writeText(d.agentWalletAddress);
     return (
-      <div className="px-3 py-2 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
-        ✓ Agent wallet: {String(d.agentWalletAddress).slice(0, 10)}…{String(d.agentWalletAddress).slice(-6)}
+      <div className="bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-2xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-[#1ee3bf]/10 flex items-center justify-center text-base">🤖</div>
+          <div>
+            <p className="text-white text-sm font-semibold">Agent Created!</p>
+            <p className="text-[#687e8e] text-xs capitalize">{d.ruleType} · {d.amount} USDT · {d.schedule}</p>
+          </div>
+        </div>
+        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl p-3">
+          <p className="text-[#687e8e] text-xs mb-1.5">Agent Wallet — fund this to activate</p>
+          <div className="flex items-center gap-2">
+            <p className="text-white text-xs font-mono break-all flex-1">{d.agentWalletAddress}</p>
+            <button onClick={copy} className="text-[#687e8e] hover:text-[#1ee3bf] transition-colors shrink-0 text-xs">
+              Copy
+            </button>
+          </div>
+        </div>
+        <a
+          href={`https://sepolia.basescan.org/address/${d.agentWalletAddress}`}
+          target="_blank"
+          rel="noreferrer"
+          className="block text-center text-xs text-[#687e8e] hover:text-[#1ee3bf] transition-colors"
+        >
+          View on Basescan ↗
+        </a>
       </div>
     );
   },
