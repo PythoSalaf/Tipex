@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { motion } from "framer-motion";
 import { FaRobot } from "react-icons/fa6";
 import { PiWalletFill } from "react-icons/pi";
 import { MdMenu, MdClose, MdContentCopy, MdCheckCircle, MdLogout } from "react-icons/md";
@@ -94,7 +95,12 @@ const Navbar = () => {
   };
 
   return (
-    <div className="w-full fixed bg-black z-50 py-2.5 relative">
+    <motion.div
+      className="w-full fixed bg-black/80 backdrop-blur-xl z-50 py-2.5 border-b border-[#1e2a35]/50"
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ type: "spring", stiffness: 100, damping: 20 }}
+    >
       <div className="bg-black text-white flex items-center justify-between w-[95%] mx-auto">
         <div className="flex items-center gap-2">
           <FaRobot className="w-7 h-7 animate-bounce text-[#1ee3bf]" />
@@ -188,10 +194,10 @@ const Navbar = () => {
           )}
         </div>
 
-      {/* Seed phrase modal */}
-      {newSeed && (
-        <SeedPhraseModal seed={newSeed} onClose={() => setNewSeed("")} />
-      )}
+        {/* Seed phrase modal */}
+        {newSeed && (
+          <SeedPhraseModal seed={newSeed} onClose={() => setNewSeed("")} />
+        )}
 
         {/* Restore wallet modal */}
         {showRestore && !address && (
@@ -203,7 +209,7 @@ const Navbar = () => {
           />
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

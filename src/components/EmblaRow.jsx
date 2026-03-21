@@ -2,9 +2,13 @@
 
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
+import { motion } from "framer-motion";
 import EmbaCard from "./EmbaCard";
+import { useAnimationPreferences } from "../lib/animations";
 
 const EmblaRow = ({ reverse }) => {
+  const { shouldReduceMotion } = useAnimationPreferences();
+
   const cards = [
     {
       title: "Salary Agent",
@@ -57,13 +61,33 @@ const EmblaRow = ({ reverse }) => {
   );
 
   return (
-    <div className="overflow-hidden" ref={emblaRef}>
-      <div className="flex gap-4">
-        {cards.concat(cards).map((card, i) => (
-          <EmbaCard key={i} {...card} />
-        ))}
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.6 }}
+    >
+      <div
+        className="overflow-hidden"
+        ref={emblaRef}
+      >
+        <div className="flex gap-4">
+          {cards.concat(cards).map((card, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{
+                delay: i * 0.1,
+                duration: 0.4
+              }}
+            >
+              <EmbaCard {...card} />
+            </motion.div>
+          ))}
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
