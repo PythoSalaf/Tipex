@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { GloveClient, defineTool, createRemoteModel, MemoryStore } from "glove-react";
 import { z } from "zod";
-import { getAgents, saveAgents } from "./agentStore";
+import { getAgents, saveAgents, getLogs } from "./agentStore";
 import { initEvmWallet } from "./wdkWallet";
+import { getUSDTBalance, getETHBalance } from "./getBalance";
+import { EXPLORER_TX } from "./constants";
 
 // ── Groq (fetch-based, browser-safe) ─────────────────────────────────────────
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
@@ -178,6 +181,55 @@ const tipexModel = createRemoteModel(GROQ_MODEL, {
     };
   },
 });
+
+// ── Shared utilities ─────────────────────────────────────────────────────────
+
+const SCHEDULE_MS = {
+  daily: 86_400_000,
+  weekly: 604_800_000,
+  monthly: 2_592_000_000,
+  yearly: 31_536_000_000,
+};
+
+function computeNextRun(agent) {
+  if (!agent.active) return null;
+  const interval = SCHEDULE_MS[agent.schedule] || SCHEDULE_MS.monthly;
+  const last = agent.lastRun ? new Date(agent.lastRun).getTime() : 0;
+  return new Date(last + interval);
+}
+
+function formatCountdown(date) {
+  if (!date) return "Paused";
+  const diff = date.getTime() - Date.now();
+  if (diff <= 0) return "Overdue";
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `in ${mins}m`;
+  const hrs = Math.floor(diff / 3_600_000);
+  if (hrs < 24) return `in ${hrs}h`;
+  const days = Math.floor(diff / 86_400_000);
+  return `in ${days}d`;
+}
+
+async function resolveAgent(nameInput) {
+  const agents = getAgents();
+  const lower = nameInput?.toLowerCase() || "";
+  const agent = agents.find(
+    (a) =>
+      a.name?.toLowerCase() === lower ||
+      a.name?.toLowerCase().includes(lower)
+  );
+  if (!agent) throw new Error(`No agent found matching "${nameInput}". Available: ${agents.map((a) => a.name).join(", ") || "none"}`);
+  return { agent, agents };
+}
+
+async function resolveAgentWithAccount(nameInput) {
+  const { agent, agents } = await resolveAgent(nameInput);
+  const seed = localStorage.getItem("seed");
+  if (!seed) throw new Error("No wallet connected. Please connect your wallet first.");
+  const { wdk } = initEvmWallet(seed);
+  const account = await wdk.getAccount("ethereum", agent.walletIndex);
+  return { agent, agents, account };
+}
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
@@ -690,6 +742,610 @@ const listAgentsTool = defineTool({
   },
 });
 
+// 7. Check balance
+const checkBalanceTool = defineTool({
+  name: "check_balance",
+  description: "Check the USDC and ETH balance of a specific agent's wallet. Call this when the user asks about a wallet balance or how much is in an agent.",
+  inputSchema: z.object({
+    agentName: z.string().describe("Name of the agent whose balance to check"),
+  }),
+  displayPropsSchema: z.object({
+    agentName: z.string(),
+    agentWalletAddress: z.string(),
+    usdc: z.number(),
+    eth: z.number(),
+    healthy: z.boolean(),
+    minBal: z.number(),
+  }),
+  displayStrategy: "stay",
+  async do(input, display) {
+    try {
+      const { agent, account } = await resolveAgentWithAccount(input.agentName);
+      const [usdc, eth] = await Promise.all([getUSDTBalance(account), getETHBalance(account)]);
+      const displayData = {
+        agentName: agent.name,
+        agentWalletAddress: agent.agentWalletAddress,
+        usdc,
+        eth,
+        healthy: usdc >= agent.minBal,
+        minBal: agent.minBal,
+      };
+      await display.pushAndForget(displayData);
+      return {
+        status: "success",
+        data: `${agent.name}'s wallet: ${usdc.toFixed(2)} USDC, ${eth.toFixed(6)} ETH. ${usdc < agent.minBal ? "Balance is below minimum threshold." : "Balance is healthy."}`,
+        renderData: displayData,
+      };
+    } catch (e) {
+      return { status: "error", data: null, message: e.message };
+    }
+  },
+  render({ props }) {
+    return (
+      <div className="bg-[#0d1117] border border-[#1e2a35] rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-white text-sm font-semibold">{props.agentName} — Balance</p>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${props.healthy ? "bg-[#1ee3bf]/10 text-[#1ee3bf]" : "bg-red-500/10 text-red-400"}`}>
+            {props.healthy ? "Healthy" : "Low Balance"}
+          </span>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-3 py-2 bg-[#0a1f1a] border border-[#1ee3bf]/20 rounded-xl">
+            <span className="text-[#687e8e] text-xs">USDC</span>
+            <span className="text-[#1ee3bf] text-sm font-bold">{props.usdc.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 bg-[#0a0f15] border border-[#1e2a35] rounded-xl">
+            <span className="text-[#687e8e] text-xs">ETH (gas)</span>
+            <span className="text-white text-sm font-bold">{props.eth.toFixed(6)}</span>
+          </div>
+          {!props.healthy && (
+            <p className="text-red-400 text-xs px-1">⚠ Balance below minimum threshold of {props.minBal} USDC</p>
+          )}
+        </div>
+        <a
+          href={`https://sepolia.basescan.org/address/${props.agentWalletAddress}`}
+          target="_blank" rel="noreferrer"
+          className="block text-center text-xs text-[#687e8e] hover:text-[#1ee3bf] transition-colors"
+        >
+          View on Basescan ↗
+        </a>
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    return (
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+        💰 {data.agentName}: {data.usdc.toFixed(2)} USDC · {data.eth.toFixed(5)} ETH
+      </div>
+    );
+  },
+});
+
+// 8. Pause agent
+const pauseAgentTool = defineTool({
+  name: "pause_agent",
+  description: "Pause a payment agent so it stops executing payments. Call when user says pause, stop, or disable an agent.",
+  inputSchema: z.object({
+    agentName: z.string().describe("Name of the agent to pause"),
+  }),
+  displayPropsSchema: z.object({
+    agentName: z.string(),
+    ruleType: z.string(),
+    amount: z.number(),
+    schedule: z.string(),
+    agentWalletAddress: z.string(),
+  }),
+  displayStrategy: "stay",
+  async do(input, display) {
+    try {
+      const { agent, agents } = await resolveAgent(input.agentName);
+      if (!agent.active) {
+        return { status: "success", data: `Agent "${agent.name}" is already paused.`, renderData: null };
+      }
+      saveAgents(agents.map((a) => (a.id === agent.id ? { ...a, active: false } : a)));
+      const displayData = { agentName: agent.name, ruleType: agent.ruleType, amount: agent.amount, schedule: agent.schedule, agentWalletAddress: agent.agentWalletAddress };
+      await display.pushAndForget(displayData);
+      return { status: "success", data: `Agent "${agent.name}" has been paused. No payments will execute until resumed.`, renderData: displayData };
+    } catch (e) {
+      return { status: "error", data: null, message: e.message };
+    }
+  },
+  render({ props }) {
+    return (
+      <div className="bg-[#0d1117] border border-yellow-500/30 rounded-2xl p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-yellow-400 text-base">⏸</span>
+          <p className="text-white text-sm font-semibold">{props.agentName} — Paused</p>
+        </div>
+        <p className="text-[#687e8e] text-xs capitalize">{props.ruleType} · {props.amount} USDC · {props.schedule}</p>
+        <p className="text-[#3a4a5a] text-xs font-mono truncate">{props.agentWalletAddress}</p>
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    return <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-xs text-yellow-400">⏸ {data.agentName} paused</div>;
+  },
+});
+
+// 9. Resume agent
+const resumeAgentTool = defineTool({
+  name: "resume_agent",
+  description: "Resume a paused payment agent so it starts executing payments again. Call when user says resume, start, enable, or activate an agent.",
+  inputSchema: z.object({
+    agentName: z.string().describe("Name of the agent to resume"),
+  }),
+  displayPropsSchema: z.object({
+    agentName: z.string(),
+    ruleType: z.string(),
+    amount: z.number(),
+    schedule: z.string(),
+    agentWalletAddress: z.string(),
+  }),
+  displayStrategy: "stay",
+  async do(input, display) {
+    try {
+      const { agent, agents } = await resolveAgent(input.agentName);
+      if (agent.active) {
+        return { status: "success", data: `Agent "${agent.name}" is already active.`, renderData: null };
+      }
+      saveAgents(agents.map((a) => (a.id === agent.id ? { ...a, active: true } : a)));
+      const displayData = { agentName: agent.name, ruleType: agent.ruleType, amount: agent.amount, schedule: agent.schedule, agentWalletAddress: agent.agentWalletAddress };
+      await display.pushAndForget(displayData);
+      return { status: "success", data: `Agent "${agent.name}" has been resumed and will execute payments on schedule.`, renderData: displayData };
+    } catch (e) {
+      return { status: "error", data: null, message: e.message };
+    }
+  },
+  render({ props }) {
+    return (
+      <div className="bg-[#0d1117] border border-[#1ee3bf]/30 rounded-2xl p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[#1ee3bf] text-base">▶</span>
+          <p className="text-white text-sm font-semibold">{props.agentName} — Active</p>
+        </div>
+        <p className="text-[#687e8e] text-xs capitalize">{props.ruleType} · {props.amount} USDC · {props.schedule}</p>
+        <p className="text-[#3a4a5a] text-xs font-mono truncate">{props.agentWalletAddress}</p>
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    return <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">▶ {data.agentName} resumed</div>;
+  },
+});
+
+// 10. Delete agent
+const deleteAgentTool = defineTool({
+  name: "delete_agent",
+  description: "Permanently delete a payment agent after user confirms. The tool handles the confirmation UI — call it directly when user asks to delete or remove an agent.",
+  inputSchema: z.object({
+    agentName: z.string().describe("Name of the agent to delete"),
+  }),
+  displayPropsSchema: z.object({
+    agentName: z.string(),
+    ruleType: z.string(),
+    amount: z.number(),
+    schedule: z.string(),
+    agentWalletAddress: z.string(),
+  }),
+  resolveSchema: z.boolean(),
+  displayStrategy: "hide-on-complete",
+  async do(input, display) {
+    try {
+      const { agent, agents } = await resolveAgent(input.agentName);
+      const confirmed = await display.pushAndWait({
+        agentName: agent.name,
+        ruleType: agent.ruleType,
+        amount: agent.amount,
+        schedule: agent.schedule,
+        agentWalletAddress: agent.agentWalletAddress,
+      });
+      if (!confirmed) {
+        return { status: "success", data: "Deletion cancelled.", renderData: { cancelled: true, agentName: agent.name } };
+      }
+      saveAgents(agents.filter((a) => a.id !== agent.id));
+      return { status: "success", data: `Agent "${agent.name}" has been permanently deleted.`, renderData: { cancelled: false, agentName: agent.name } };
+    } catch (e) {
+      return { status: "error", data: null, message: e.message };
+    }
+  },
+  render({ props, resolve }) {
+    return (
+      <div className="space-y-3">
+        <p className="text-red-400 text-sm font-semibold">⚠ Delete Agent?</p>
+        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl overflow-hidden">
+          {[["Name", props.agentName], ["Type", props.ruleType], ["Amount", `${props.amount} USDC`], ["Schedule", props.schedule], ["Wallet", `${props.agentWalletAddress.slice(0, 10)}…${props.agentWalletAddress.slice(-6)}`]].map(([label, value], i, arr) => (
+            <div key={label} className={`flex items-center justify-between px-4 py-2.5 ${i < arr.length - 1 ? "border-b border-[#0a0f15]" : ""}`}>
+              <span className="text-[#687e8e] text-xs">{label}</span>
+              <span className="text-white text-xs font-semibold capitalize">{value}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[#687e8e] text-xs">This cannot be undone. Any funds in the agent wallet must be manually retrieved.</p>
+        <div className="flex gap-2">
+          <button onClick={() => resolve(false)} className="flex-1 border border-[#1e2a35] text-[#687e8e] hover:text-white py-2.5 rounded-xl text-sm transition-all">Cancel</button>
+          <button onClick={() => resolve(true)} className="flex-1 bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-red-600 transition-all">Delete Agent</button>
+        </div>
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    if (data.cancelled) return <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a0f15] border border-[#1e2a35] rounded-xl text-xs text-[#687e8e]">Deletion cancelled</div>;
+    return <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400">🗑 {data.agentName} deleted</div>;
+  },
+});
+
+// 11. Edit agent
+const editAgentTool = defineTool({
+  name: "edit_agent",
+  description: "Modify an existing agent's amount, schedule, or minimum balance. Call when user wants to change, update, or edit an agent's settings.",
+  inputSchema: z.object({
+    agentName: z.string().describe("Name of the agent to edit"),
+    instruction: z.string().describe("Brief instruction shown above the form"),
+  }),
+  displayPropsSchema: z.object({
+    agentName: z.string(),
+    instruction: z.string(),
+    currentAmount: z.number(),
+    currentSchedule: z.string(),
+    currentMinBal: z.number(),
+  }),
+  resolveSchema: z.object({ amount: z.number(), schedule: z.string(), minBal: z.number() }),
+  displayStrategy: "hide-on-complete",
+  async do(input, display) {
+    try {
+      const { agent, agents } = await resolveAgent(input.agentName);
+      const { amount, schedule, minBal } = await display.pushAndWait({
+        agentName: agent.name,
+        instruction: input.instruction,
+        currentAmount: agent.amount,
+        currentSchedule: agent.schedule,
+        currentMinBal: agent.minBal,
+      });
+      saveAgents(agents.map((a) => (a.id === agent.id ? { ...a, amount, schedule, minBal } : a)));
+      return {
+        status: "success",
+        data: `Agent "${agent.name}" updated: ${amount} USDC ${schedule}, min balance ${minBal} USDC.`,
+        renderData: { agentName: agent.name, amount, schedule, minBal },
+      };
+    } catch (e) {
+      return { status: "error", data: null, message: e.message };
+    }
+  },
+  render({ props, resolve }) {
+    function EditForm() {
+      const [amount, setAmount] = useState(String(props.currentAmount));
+      const [schedule, setSchedule] = useState(props.currentSchedule);
+      const [minBal, setMinBal] = useState(String(props.currentMinBal));
+      const submit = () => {
+        const amt = parseFloat(amount);
+        const min = parseFloat(minBal);
+        if (!amt || amt <= 0 || !min || min <= 0) return;
+        resolve({ amount: amt, schedule, minBal: min });
+      };
+      const scheduleOptions = ["daily", "weekly", "monthly", "yearly"];
+      return (
+        <div className="space-y-3">
+          <p className="text-white text-sm font-medium">{props.instruction}</p>
+          <div className="space-y-2">
+            <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
+              <label className="text-[#687e8e] text-xs block mb-1">Amount (USDC)</label>
+              <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-transparent outline-none text-white text-sm" />
+            </div>
+            <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5">
+              <label className="text-[#687e8e] text-xs block mb-1">Schedule</label>
+              <div className="flex gap-2 flex-wrap mt-1">
+                {scheduleOptions.map((s) => (
+                  <button key={s} onClick={() => setSchedule(s)}
+                    className={`px-3 py-1 rounded-lg text-xs border capitalize transition-all ${schedule === s ? "border-[#1ee3bf] text-[#1ee3bf] bg-[#0a1f1a]" : "border-[#1e2a35] text-[#687e8e] hover:border-[#1ee3bf]/50"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bg-[#0a0f15] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
+              <label className="text-[#687e8e] text-xs block mb-1">Min Balance (USDC)</label>
+              <input type="number" min="0" step="1" value={minBal} onChange={(e) => setMinBal(e.target.value)} className="w-full bg-transparent outline-none text-white text-sm" />
+            </div>
+          </div>
+          <button onClick={submit} className="w-full bg-[#1ee3bf] text-black font-semibold py-2.5 rounded-xl text-sm hover:bg-[#17c9aa] transition-all">Save Changes →</button>
+        </div>
+      );
+    }
+    return <EditForm />;
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    return (
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+        ✏ {data.agentName}: {data.amount} USDC · {data.schedule} · min ${data.minBal}
+      </div>
+    );
+  },
+});
+
+// 12. Check logs
+const checkLogsTool = defineTool({
+  name: "check_logs",
+  description: "Show recent payment execution history for a specific agent or all agents. Call when user asks about payment history, logs, or past transactions.",
+  inputSchema: z.object({
+    agentName: z.string().optional().describe("Agent name to filter logs. Omit for all agents."),
+    limit: z.number().optional().describe("Max entries to show, default 8"),
+  }),
+  displayPropsSchema: z.object({
+    title: z.string(),
+    logs: z.array(z.object({
+      status: z.string(),
+      agentName: z.string(),
+      amount: z.number(),
+      recipient: z.string(),
+      balance: z.string(),
+      reason: z.string(),
+      date: z.string(),
+      txHash: z.string().nullable(),
+    })),
+  }),
+  displayStrategy: "stay",
+  async do(input, display) {
+    let logs = getLogs();
+    let title = "All Agents — Recent Logs";
+    if (input.agentName) {
+      const lower = input.agentName.toLowerCase();
+      logs = logs.filter((l) => l.agentName?.toLowerCase().includes(lower));
+      title = `${input.agentName} — Recent Logs`;
+    }
+    const limit = Math.min(input.limit || 8, 20);
+    logs = logs.slice(0, limit);
+    const displayData = { title, logs };
+    await display.pushAndForget(displayData);
+    if (!logs.length) return { status: "success", data: "No logs found.", renderData: displayData };
+    const counts = logs.reduce((acc, l) => { acc[l.status] = (acc[l.status] || 0) + 1; return acc; }, {});
+    return {
+      status: "success",
+      data: `Last ${logs.length} log(s): ${Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ")}.`,
+      renderData: displayData,
+    };
+  },
+  render({ props }) {
+    if (!props.logs.length) {
+      return <div className="px-4 py-3 bg-[#0d1117] border border-[#1e2a35] rounded-2xl text-[#687e8e] text-sm">No execution logs yet.</div>;
+    }
+    const icon = (s) => s === "success" ? "✓" : s === "skipped" ? "–" : "✕";
+    const color = (s) => s === "success" ? "text-[#1ee3bf]" : s === "skipped" ? "text-yellow-400" : "text-red-400";
+    return (
+      <div className="space-y-2">
+        <p className="text-white text-sm font-semibold">{props.title}</p>
+        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl overflow-hidden">
+          {props.logs.map((log, i) => (
+            <div key={i} className={`flex items-center justify-between px-3 py-2.5 ${i < props.logs.length - 1 ? "border-b border-[#0a0f15]" : ""}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`text-xs font-bold shrink-0 ${color(log.status)}`}>{icon(log.status)}</span>
+                <div className="min-w-0">
+                  <p className="text-white text-xs truncate">{log.agentName} → {log.amount} USDC</p>
+                  <p className="text-[#687e8e] text-xs truncate" title={log.reason}>{log.reason}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                <span className="text-[#3a4a5a] text-xs">{log.date}</span>
+                {log.txHash && (
+                  <a href={`${EXPLORER_TX}/${log.txHash}`} target="_blank" rel="noreferrer" className="text-[#687e8e] hover:text-[#1ee3bf] text-xs transition-colors">↗</a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+        📋 {data.logs.length} log{data.logs.length !== 1 ? "s" : ""}
+      </div>
+    );
+  },
+});
+
+// 13. Next payment
+const nextPaymentTool = defineTool({
+  name: "next_payment",
+  description: "Show when each agent will next execute a payment based on their schedule and last run time. Call when user asks 'when does X pay next' or 'next payment'.",
+  inputSchema: z.object({
+    agentName: z.string().optional().describe("Agent name to check. Omit for all agents."),
+  }),
+  displayPropsSchema: z.object({
+    schedule: z.array(z.object({
+      name: z.string(),
+      ruleType: z.string(),
+      active: z.boolean(),
+      amount: z.number(),
+      scheduleFreq: z.string(),
+      nextRunISO: z.string().nullable(),
+      overdue: z.boolean(),
+    })),
+  }),
+  displayStrategy: "stay",
+  async do(input, display) {
+    let agents = getAgents();
+    if (input.agentName) {
+      const lower = input.agentName.toLowerCase();
+      agents = agents.filter((a) => a.name?.toLowerCase().includes(lower));
+    }
+    const schedule = agents.map((a) => {
+      const nextRun = computeNextRun(a);
+      return {
+        name: a.name,
+        ruleType: a.ruleType,
+        active: a.active,
+        amount: a.amount,
+        scheduleFreq: a.schedule,
+        nextRunISO: nextRun ? nextRun.toISOString() : null,
+        overdue: nextRun ? nextRun.getTime() < Date.now() : false,
+      };
+    }).sort((a, b) => {
+      if (!a.nextRunISO) return 1;
+      if (!b.nextRunISO) return -1;
+      return new Date(a.nextRunISO) - new Date(b.nextRunISO);
+    });
+    await display.pushAndForget({ schedule });
+    const summary = schedule.map((s) => `${s.name}: ${s.nextRunISO ? formatCountdown(new Date(s.nextRunISO)) : "paused"}`).join(", ");
+    return { status: "success", data: summary, renderData: { schedule } };
+  },
+  render({ props }) {
+    if (!props.schedule.length) {
+      return <div className="px-4 py-3 bg-[#0d1117] border border-[#1e2a35] rounded-2xl text-[#687e8e] text-sm">No agents found.</div>;
+    }
+    return (
+      <div className="space-y-2">
+        <p className="text-white text-sm font-semibold">Next Payments</p>
+        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl overflow-hidden">
+          {props.schedule.map((s, i) => {
+            const countdown = s.nextRunISO ? formatCountdown(new Date(s.nextRunISO)) : "Paused";
+            const isOverdue = s.overdue;
+            return (
+              <div key={i} className={`flex items-center justify-between px-4 py-3 ${i < props.schedule.length - 1 ? "border-b border-[#0a0f15]" : ""}`}>
+                <div>
+                  <p className="text-white text-sm font-semibold">{s.name}</p>
+                  <p className="text-[#687e8e] text-xs capitalize">{s.ruleType} · {s.amount} USDC · {s.scheduleFreq}</p>
+                </div>
+                <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${
+                  !s.active ? "bg-[#1e2a35] text-[#687e8e]" :
+                  isOverdue ? "bg-yellow-500/10 text-yellow-400" :
+                  "bg-[#0a1f1a] text-[#1ee3bf]"
+                }`}>
+                  {countdown}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    const first = data.schedule[0];
+    if (!first) return null;
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+        🕐 Next: {first.name} {first.nextRunISO ? formatCountdown(new Date(first.nextRunISO)) : "paused"}
+      </div>
+    );
+  },
+});
+
+// 14. Agent status
+const agentStatusTool = defineTool({
+  name: "agent_status",
+  description: "Full health report for one or all agents: balance, next run, active state, low-balance warning. Call when user asks for status, health check, or overview.",
+  inputSchema: z.object({
+    agentName: z.string().optional().describe("Agent name to inspect. Omit for all agents."),
+  }),
+  displayPropsSchema: z.object({
+    agents: z.array(z.object({
+      name: z.string(),
+      ruleType: z.string(),
+      active: z.boolean(),
+      amount: z.number(),
+      schedule: z.string(),
+      minBal: z.number(),
+      agentWalletAddress: z.string(),
+      usdc: z.number(),
+      eth: z.number(),
+      healthy: z.boolean(),
+      nextRunISO: z.string().nullable(),
+      overdue: z.boolean(),
+    })),
+  }),
+  displayStrategy: "stay",
+  async do(input, display) {
+    try {
+      const seed = localStorage.getItem("seed");
+      if (!seed) return { status: "error", data: null, message: "No wallet connected." };
+      let agents = getAgents();
+      if (input.agentName) {
+        const lower = input.agentName.toLowerCase();
+        agents = agents.filter((a) => a.name?.toLowerCase().includes(lower));
+      }
+      if (!agents.length) return { status: "success", data: "No agents found.", renderData: { agents: [] } };
+      const { wdk } = initEvmWallet(seed);
+      const enriched = await Promise.all(
+        agents.map(async (a) => {
+          const account = await wdk.getAccount("ethereum", a.walletIndex);
+          const [usdc, eth] = await Promise.all([getUSDTBalance(account), getETHBalance(account)]);
+          const nextRun = computeNextRun(a);
+          return {
+            name: a.name, ruleType: a.ruleType, active: a.active,
+            amount: a.amount, schedule: a.schedule, minBal: a.minBal,
+            agentWalletAddress: a.agentWalletAddress,
+            usdc, eth, healthy: usdc >= a.minBal,
+            nextRunISO: nextRun ? nextRun.toISOString() : null,
+            overdue: nextRun ? nextRun.getTime() < Date.now() : false,
+          };
+        })
+      );
+      await display.pushAndForget({ agents: enriched });
+      const summary = enriched.map((a) =>
+        `${a.name}: ${a.usdc.toFixed(2)} USDC, ${a.active ? "active" : "paused"}, next run ${a.nextRunISO ? formatCountdown(new Date(a.nextRunISO)) : "paused"}`
+      ).join("; ");
+      return { status: "success", data: summary, renderData: { agents: enriched } };
+    } catch (e) {
+      return { status: "error", data: null, message: e.message };
+    }
+  },
+  render({ props }) {
+    if (!props.agents.length) return <div className="px-4 py-3 bg-[#0d1117] border border-[#1e2a35] rounded-2xl text-[#687e8e] text-sm">No agents found.</div>;
+    return (
+      <div className="space-y-3">
+        <p className="text-white text-sm font-semibold">Agent Status ({props.agents.length})</p>
+        {props.agents.map((a) => (
+          <div key={a.name} className={`bg-[#0d1117] border rounded-2xl p-4 space-y-3 ${!a.healthy ? "border-red-500/30" : a.active ? "border-[#1ee3bf]/20" : "border-[#1e2a35]"}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <p className="text-white text-sm font-semibold">{a.name}</p>
+                <span className="text-[#687e8e] text-xs capitalize">{a.ruleType}</span>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${a.active ? "bg-[#1ee3bf]/10 text-[#1ee3bf]" : "bg-yellow-500/10 text-yellow-400"}`}>
+                {a.active ? "Active" : "Paused"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-[#0a1f1a] rounded-xl px-3 py-2">
+                <p className="text-[#687e8e] text-xs mb-0.5">USDC</p>
+                <p className={`text-sm font-bold ${a.healthy ? "text-[#1ee3bf]" : "text-red-400"}`}>{a.usdc.toFixed(2)}</p>
+              </div>
+              <div className="bg-[#0a0f15] rounded-xl px-3 py-2">
+                <p className="text-[#687e8e] text-xs mb-0.5">ETH (gas)</p>
+                <p className="text-white text-sm font-bold">{a.eth.toFixed(5)}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[#687e8e]">{a.amount} USDC · {a.schedule} · min {a.minBal}</span>
+              <span className={`font-semibold ${a.overdue ? "text-yellow-400" : "text-[#1ee3bf]"}`}>
+                {a.nextRunISO ? formatCountdown(new Date(a.nextRunISO)) : "Paused"}
+              </span>
+            </div>
+            {!a.healthy && <p className="text-red-400 text-xs">⚠ Balance below minimum threshold</p>}
+          </div>
+        ))}
+      </div>
+    );
+  },
+  renderResult({ data }) {
+    if (!data?.agents?.length) return null;
+    const healthy = data.agents.filter((a) => a.healthy).length;
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+        📊 {data.agents.length} agents · {healthy} healthy
+      </div>
+    );
+  },
+});
+
 // ── System prompt ─────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are Tipex AI — an autonomous payment agent creation assistant for the Tipex platform, built on Base Sepolia testnet using Tether's WDK (Wallet Development Kit).
 
@@ -717,16 +1373,37 @@ Your job is to guide users through creating autonomous on-chain USDT payment age
 - NEVER call any tool without clear user intent for that action.
 - After \`list_agents\`, STOP and wait for user input — do not start the creation flow automatically.
 - After \`create_agent_wallet\`, STOP — do not call \`choose_payment_type\` or any other tool.
+- For \`delete_agent\`: call it directly — it handles the confirmation UI, do NOT ask "are you sure?" in text.
+- For \`edit_agent\`: call it directly with the agent name — it handles the form, do NOT collect changes via text.
 - NEVER list options or collect info via plain text — always use the appropriate tool.
 - chain is always "Base" (Base Sepolia testnet).
 - Responses between tool calls: 1-2 sentences max.
 
+### Managing existing agents — trigger phrases:
+- "check balance" / "how much in X" → \`check_balance\`
+- "status" / "health" / "overview" → \`agent_status\`
+- "pause X" / "stop X" / "disable X" → \`pause_agent\`
+- "resume X" / "start X" / "enable X" → \`resume_agent\`
+- "delete X" / "remove X" → \`delete_agent\`
+- "edit X" / "change X" / "update X" → \`edit_agent\`
+- "logs" / "history" / "transactions" → \`check_logs\`
+- "next payment" / "when does X pay" → \`next_payment\`
+- "show agents" / "list agents" → \`list_agents\`
+
 Available tools:
-- list_agents: Show all the user's existing payment agents
+- list_agents: Show all existing agents
+- check_balance: USDC + ETH balance of an agent wallet
+- agent_status: Full health report (balance + next run + active state) for one or all agents
+- pause_agent: Pause an agent by name
+- resume_agent: Resume a paused agent by name
+- delete_agent: Delete an agent (handles confirmation UI)
+- edit_agent: Edit amount, schedule, or min balance (handles form UI)
+- check_logs: Recent payment execution history
+- next_payment: When each agent will next execute
 - choose_payment_type: Show 4 payment type buttons (salary, gift, subscription, conditional)
 - collect_recipient_info: Form for recipient name + wallet address
-- collect_payment_details: Form for USDT amount, schedule, min balance
-- review_and_confirm: Full plan summary for user approval (requires all 7 fields)
+- collect_payment_details: Form for USDC amount, schedule, min balance
+- review_and_confirm: Full plan summary for user approval
 - create_agent_wallet: Creates WDK wallet and saves agent (call only after approval)`;
 
 // ── GloveClient export ────────────────────────────────────────────────────────
@@ -736,6 +1413,14 @@ export const gloveClient = new GloveClient({
   systemPrompt: SYSTEM_PROMPT,
   tools: [
     listAgentsTool,
+    checkBalanceTool,
+    agentStatusTool,
+    pauseAgentTool,
+    resumeAgentTool,
+    deleteAgentTool,
+    editAgentTool,
+    checkLogsTool,
+    nextPaymentTool,
     choosePaymentTypeTool,
     collectRecipientTool,
     collectPaymentDetailsTool,
