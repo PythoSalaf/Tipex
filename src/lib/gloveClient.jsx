@@ -1368,7 +1368,139 @@ const editAgentTool = defineTool({
   },
 });
 
-// 12. Check logs
+// 12. Fund agent
+const fundAgentTool = defineTool({
+  name: "fund_agent",
+  description: "Let the user fund an agent wallet with USDC. Shows a funding form and automatically handles the ETH gas top-up. Call when the user wants to fund, top-up, or add USDC to an agent.",
+  inputSchema: z.object({
+    agentName: z.string().describe("Name of the agent to fund"),
+  }),
+  displayPropsSchema: z.object({
+    agentName: z.string(),
+    agentWalletAddress: z.string(),
+    suggestedAmount: z.number(),
+  }),
+  resolveSchema: z.object({ txHash: z.string(), amount: z.number() }),
+  displayStrategy: "hide-on-complete",
+  async do(input, display) {
+    try {
+      const { agent } = await resolveAgent(input.agentName);
+      const seed = localStorage.getItem("seed");
+      if (!seed) throw new Error("No wallet connected. Please connect your wallet first.");
+
+      const result = await display.pushAndWait({
+        agentName: agent.name,
+        agentWalletAddress: agent.agentWalletAddress,
+        suggestedAmount: agent.amount * 5,
+      });
+
+      return {
+        status: "success",
+        data: `Agent "${agent.name}" funded with ${result.amount} USDC. Tx: ${result.txHash}`,
+        renderData: { agentName: agent.name, txHash: result.txHash, amount: result.amount },
+      };
+    } catch (e) {
+      return { status: "error", data: null, message: e.message };
+    }
+  },
+  render({ props, resolve }) {
+    function FundForm() {
+      const [amount, setAmount]   = useState(String(props.suggestedAmount));
+      const [busy, setBusy]       = useState(false);
+      const [err, setErr]         = useState("");
+
+      const handleFund = async () => {
+        const amt = parseFloat(amount);
+        if (!amt || amt <= 0) return;
+        setBusy(true);
+        setErr("");
+        try {
+          const seed = localStorage.getItem("seed");
+          if (!seed) throw new Error("Wallet not connected");
+          const { wdk } = initEvmWallet(seed);
+          const masterAccount = await wdk.getAccount("ethereum", 0);
+
+          // Top up ETH for gas if needed
+          const { getETHBalance } = await import("./getBalance");
+          const { sendETH } = await import("./sendPayment");
+          const agentEth = await getETHBalance(await wdk.getAccount("ethereum",
+            getAgents().find(a => a.agentWalletAddress === props.agentWalletAddress)?.walletIndex ?? 1
+          ));
+          if (agentEth < 0.003) {
+            await sendETH({ account: masterAccount, recipient: props.agentWalletAddress, amountEth: 0.003 });
+          }
+
+          const { sendUSDC } = await import("./sendPayment");
+          const { txHash } = await sendUSDC({ account: masterAccount, recipient: props.agentWalletAddress, amount: amt });
+          resolve({ txHash, amount: amt });
+        } catch (e) {
+          const msg = e.message || "";
+          if (msg.includes("INSUFFICIENT_FUNDS") || msg.includes("insufficient funds for intrinsic")) {
+            setErr("Your main wallet has no ETH for gas on Base Sepolia. Get some at alchemy.com/faucets/base-sepolia");
+          } else {
+            setErr(msg || "Transfer failed");
+          }
+          setBusy(false);
+        }
+      };
+
+      return (
+        <div className="bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-2xl p-4 space-y-3">
+          <div>
+            <p className="text-white text-sm font-semibold">Fund Agent: {props.agentName}</p>
+            <p className="text-[#687e8e] text-xs font-mono mt-0.5 break-all">{props.agentWalletAddress}</p>
+          </div>
+          <div className="bg-[#0d1117] border border-[#1e2a35] rounded-xl px-3 py-2.5 focus-within:border-[#1ee3bf]/40 transition-colors">
+            <label className="text-[#687e8e] text-xs block mb-1">Amount (USDC)</label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={busy}
+              className="w-full bg-transparent outline-none text-white text-sm disabled:opacity-50"
+            />
+          </div>
+          {err && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-2.5">
+              <p className="text-yellow-400 text-xs">⚠ {err}</p>
+            </div>
+          )}
+          <button
+            onClick={handleFund}
+            disabled={busy || !amount}
+            className="w-full bg-[#1ee3bf] text-black font-semibold py-2.5 rounded-xl text-sm hover:bg-[#17c9aa] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            {busy ? "Sending…" : `Fund with ${amount || "—"} USDC →`}
+          </button>
+          <p className="text-[#2a3a4a] text-xs text-center">0.003 ETH for gas is included automatically</p>
+        </div>
+      );
+    }
+    return <FundForm />;
+  },
+  renderResult({ data }) {
+    if (!data) return null;
+    return (
+      <div className="space-y-1.5">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0a1f1a] border border-[#1ee3bf]/30 rounded-xl text-xs text-[#1ee3bf]">
+          ✓ {data.agentName} funded with {data.amount} USDC
+        </div>
+        <a
+          href={`https://sepolia.basescan.org/tx/${data.txHash}`}
+          target="_blank"
+          rel="noreferrer"
+          className="block text-xs text-[#687e8e] hover:text-[#1ee3bf] transition-colors font-mono truncate"
+        >
+          {data.txHash?.slice(0, 24)}…{data.txHash?.slice(-6)} ↗
+        </a>
+      </div>
+    );
+  },
+});
+
+// 13. Check logs
 const checkLogsTool = defineTool({
   name: "check_logs",
   description: "Show recent payment execution history for a specific agent or all agents. Call when user asks about payment history, logs, or past transactions.",
@@ -1688,6 +1820,7 @@ Your job is to guide users through creating autonomous on-chain USDC payment age
 - "resume X" / "start X" / "enable X" → if X is named, call \`resume_agent\` directly; if no agent specified, call \`select_agent\` (action: "resume") first, then call \`resume_agent\`
 - "delete X" / "remove X" → if X is named, call \`delete_agent\` directly; if no agent specified, call \`select_agent\` (action: "delete") first, then call \`delete_agent\`
 - "edit X" / "change X" / "update X" → if X is named, call \`edit_agent\` directly; if no agent specified, call \`select_agent\` (action: "edit") first, then call \`edit_agent\`
+- "fund X" / "top up X" / "add USDC to X" / "I want to fund" → if X is named, call \`fund_agent\` directly; if no agent specified, call \`select_agent\` (action: "fund") first, then call \`fund_agent\`
 - "logs" / "history" / "transactions" → \`check_logs\` (agentName optional — omit for all agents)
 - "next payment" / "when does X pay" → \`next_payment\` (agentName optional — omit for all agents)
 - "show agents" / "list agents" → \`list_agents\`
@@ -1706,6 +1839,7 @@ Available tools:
 - resume_agent: Resume a paused agent by name
 - delete_agent: Delete an agent (handles confirmation UI)
 - edit_agent: Edit amount, schedule, or min balance (handles form UI)
+- fund_agent: Fund an agent wallet with USDC (handles ETH gas top-up automatically)
 - check_logs: Recent payment execution history
 - next_payment: When each agent will next execute
 - choose_payment_type: Show 4 payment type buttons (salary, gift, subscription, conditional)
@@ -1728,6 +1862,7 @@ export const gloveClient = new GloveClient({
     resumeAgentTool,
     deleteAgentTool,
     editAgentTool,
+    fundAgentTool,
     checkLogsTool,
     nextPaymentTool,
     choosePaymentTypeTool,

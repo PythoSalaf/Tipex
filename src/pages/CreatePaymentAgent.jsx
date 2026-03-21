@@ -20,6 +20,7 @@ const TOOL_LABELS = {
   resume_agent:           "Resuming agent…",
   delete_agent:           "Preparing deletion…",
   edit_agent:             "Loading agent settings…",
+  fund_agent:             "Preparing funding form…",
   check_logs:             "Loading payment logs…",
   next_payment:           "Calculating schedules…",
 };
