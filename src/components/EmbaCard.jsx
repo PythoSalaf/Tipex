@@ -7,7 +7,7 @@ const EmbaCard = ({ title, status, schedule, amount, receiver, condition }) => {
 
   return (
     <motion.div
-      className="w-87.5 shrink-0 bg-[#12151c] rounded-xl cursor-pointer"
+      className="w-85 shrink-0 bg-[#12151c] rounded-xl cursor-pointer"
       whileHover={
         shouldReduceMotion
           ? {}

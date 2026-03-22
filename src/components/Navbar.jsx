@@ -243,18 +243,6 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Create wallet
-  // const handleCreate = async () => {
-  //   if (address) {
-  //     alert("Wallet already connected");
-  //     return;
-  //   }
-  //   setLoading(true);
-  //   const res = await createWallet();
-  //   setAddress(res.address);
-  //   setLoading(false);
-  //   setNewSeed(res.seed);
-  // };
   const handleCreate = async () => {
     if (address) {
       alert("Wallet already connected");
