@@ -215,6 +215,7 @@ const Navbar = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [toggle, setToggle] = useState(false);
   const [balances, setBalances] = useState({
     usdc: null,
     ethBase: null,
@@ -346,12 +347,12 @@ const Navbar = () => {
   return (
     <>
       <motion.div
-        className="w-full fixed bg-black/80 backdrop-blur-xl z-50 py-2.5 border-b border-[#1e2a35]/50"
+        className="w-full  fixed bg-black/80 backdrop-blur-xl z-50 py-2.5 border-b border-[#1e2a35]/50"
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ type: "spring", stiffness: 100, damping: 20 }}
       >
-        <div className="bg-black text-white flex items-center justify-between w-[95%] mx-auto">
+        <div className="bg-black relative text-white flex items-center justify-between w-[95%] mx-auto">
           {/* Logo */}
           <div className="flex items-center gap-2">
             <FaRobot className="w-7 h-7 animate-bounce text-[#1ee3bf]" />
@@ -539,7 +540,51 @@ const Navbar = () => {
               </div>
             )}
           </div>
+          <div
+            className="block md:hidden text-white cursor-pointer"
+            onClick={() => setToggle(!toggle)}
+          >
+            {toggle ? (
+              <MdClose className="h-6 w-6" />
+            ) : (
+              <MdMenu className="h-6 w-6" />
+            )}
+          </div>
         </div>
+        {toggle && (
+          <div className="absolute bg-black text-white border-t h-[60vh] w-full top-13">
+            <div className="w-[90%] mx-auto pt-9 flex items-center flex-col gap-y-6">
+              <Link to="/" className="text-lg font-semibold">
+                Home
+              </Link>
+              <Link to="/create-agent" className="text-lg font-semibold">
+                Create Agent
+              </Link>
+              <Link to="/dashboard" className="text-lg font-semibold">
+                Dashboard
+              </Link>
+              <Link to="/logs" className="text-lg font-semibold">
+                Logs
+              </Link>
+            </div>
+            <div className="w-[90%] mx-auto flex items-center justify-center flex-col pt-7 gap-y-6">
+              <button
+                className="bg-[#1ee3bf] w-[60%] mx-auto text-black px-2 py-1.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer text-sm font-semibold"
+                onClick={handleCreate}
+                disabled={loading}
+              >
+                <PiWalletFill className="h-5 w-5" />
+                {loading ? "Creating..." : "Connect Wallet"}
+              </button>
+              <button
+                className="border border-[#1ee3bf] text-[#1ee3bf] px-2 py-1.5 rounded-xl text-sm font-semibold cursor-pointer w-[60%] mx-auto flex items-center justify-center"
+                onClick={() => setShowRestore(!showRestore)}
+              >
+                Restore Wallet
+              </button>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Swap / Bridge modal */}
