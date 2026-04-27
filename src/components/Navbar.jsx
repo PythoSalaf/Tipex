@@ -529,7 +529,7 @@ const Navbar = () => {
                   disabled={loading}
                 >
                   <PiWalletFill className="h-5 w-5" />
-                  {loading ? "Creating..." : "Connect Wallet"}
+                  {loading ? "Creating..." : "Create Wallet"}
                 </button>
                 <button
                   className="border border-[#1ee3bf] text-[#1ee3bf] px-2 py-1 rounded-xl text-sm font-semibold cursor-pointer"
@@ -574,7 +574,7 @@ const Navbar = () => {
                 disabled={loading}
               >
                 <PiWalletFill className="h-5 w-5" />
-                {loading ? "Creating..." : "Connect Wallet"}
+                {loading ? "Creating..." : "Create Wallet"}
               </button>
               <button
                 className="border border-[#1ee3bf] text-[#1ee3bf] px-2 py-1.5 rounded-xl text-sm font-semibold cursor-pointer w-[60%] mx-auto flex items-center justify-center"

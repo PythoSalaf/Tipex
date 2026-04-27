@@ -7,7 +7,7 @@ const EmbaCard = ({ title, status, schedule, amount, receiver, condition }) => {
 
   return (
     <motion.div
-      className="w-85 shrink-0 bg-[#12151c] rounded-xl cursor-pointer"
+      className="w-84 md:w-90 shrink-0 bg-[#12151c] rounded-xl cursor-pointer"
       whileHover={
         shouldReduceMotion
           ? {}
@@ -47,7 +47,7 @@ const EmbaCard = ({ title, status, schedule, amount, receiver, condition }) => {
           </motion.h4>
         </div>
 
-        <p className="text-sm text-[#687e8e] font-mono">
+        <p className="text-xs mt-1 font-medium md:text-sm text-[#687e8e] font-mono">
           Pay <span className="text-green-500 font-semibold">{amount}</span> to{" "}
           <span className="text-purple-400 font-semibold">{receiver}</span>{" "}
           {condition}

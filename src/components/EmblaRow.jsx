@@ -1,87 +1,53 @@
-"use client";
-
+import { useEffect } from "react";
 import useEmblaCarousel from "embla-carousel-react";
-import Autoplay from "embla-carousel-autoplay";
 import { motion } from "framer-motion";
 import EmbaCard from "./EmbaCard";
 import { useAnimationPreferences } from "../lib/animations";
 
-const EmblaRow = ({ reverse }) => {
+const EmblaRow = ({ data = [], reverse = false }) => {
   const { shouldReduceMotion } = useAnimationPreferences();
 
-  const cards = [
-    {
-      title: "Salary Agent",
-      status: "Active",
-      schedule: "Monthly",
-      amount: "1200 USD₮",
-      receiver: "John",
-      condition: "if balance > $2000",
-    },
-    {
-      title: "Rent Agent",
-      status: "Active",
-      schedule: "Monthly",
-      amount: "800 USD₮",
-      receiver: "Landlord",
-      condition: "every 5th",
-    },
-    {
-      title: "Savings Agent",
-      status: "Active",
-      schedule: "Weekly",
-      amount: "100 USD₮",
-      receiver: "Vault",
-      condition: "every Friday",
-    },
-    {
-      title: "Subscription Agent",
-      status: "Active",
-      schedule: "Monthly",
-      amount: "15 USD₮",
-      receiver: "Netflix",
-      condition: "every 10th",
-    },
-  ];
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    loop: true,
+    align: "start",
+  });
 
-  const [emblaRef] = useEmblaCarousel(
-    {
-      loop: true,
-      dragFree: true,
-      direction: reverse ? "rtl" : "ltr",
-      align: "start",
-    },
-    [
-      Autoplay({
-        delay: 3000,
-        stopOnInteraction: false,
-        stopOnMouseEnter: false,
-      }),
-    ],
-  );
+  useEffect(() => {
+    if (!emblaApi || shouldReduceMotion) return;
+
+    const interval = setInterval(() => {
+      if (reverse) {
+        emblaApi.scrollPrev();
+      } else {
+        emblaApi.scrollNext();
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [emblaApi, reverse, shouldReduceMotion]);
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={shouldReduceMotion ? {} : { opacity: 0, y: 30 }}
+      whileInView={shouldReduceMotion ? {} : { opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{ duration: 0.6 }}
     >
-      <div className="overflow-hidden" ref={emblaRef}>
-        <div className="flex gap-4">
-          {cards.concat(cards).map((card, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{
-                delay: i * 0.1,
-                duration: 0.4,
-              }}
-            >
-              <EmbaCard {...card} />
-            </motion.div>
-          ))}
+      <div className="overflow-hidden">
+        <div ref={emblaRef}>
+          <div className="flex gap-4">
+            {data.map((card) => (
+              <motion.div
+                key={card.title}
+                initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.9 }}
+                animate={shouldReduceMotion ? {} : { opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4 }}
+                className="flex-[0_0_100%] sm:flex-[0_0_50%] lg:flex-[0_0_33.33%]"
+              >
+                <EmbaCard {...card} />
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
     </motion.div>

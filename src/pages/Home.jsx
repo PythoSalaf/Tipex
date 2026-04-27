@@ -8,7 +8,7 @@ import { PiSwapBold } from "react-icons/pi";
 import { GiStaryu } from "react-icons/gi";
 import { motion } from "framer-motion";
 import { useAnimationPreferences } from "../lib/animations";
-import { EmblaRow, WorkCard } from "../components";
+import { EmblaRow, Section, WorkCard } from "../components";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -201,7 +201,7 @@ const Home = () => {
                 whileTap={shouldReduceMotion ? {} : { scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
               >
-                Connect Wallet
+                Create Wallet
               </motion.button>
             )}
             <motion.button
@@ -230,11 +230,11 @@ const Home = () => {
         viewport={{ once: true, margin: "-100px" }}
         transition={{ duration: 0.6 }}
       >
-        <EmblaRow reverse={false} />
+        <Section />
       </motion.div>
 
       <motion.section
-        className="mt-10 mb-7 w-[95%] mx-auto"
+        className="mt-10 md:mt-14 mb-7 w-[95%] mx-auto"
         variants={containerVariants}
         initial="hidden"
         whileInView="visible"
@@ -308,7 +308,7 @@ const Home = () => {
               whileTap={shouldReduceMotion ? {} : { scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
-              {isConnected ? "Create Agent" : "Connect Wallet"}
+              {isConnected ? "Create Agent" : "Create Wallet"}
             </motion.button>
           </div>
         </div>
